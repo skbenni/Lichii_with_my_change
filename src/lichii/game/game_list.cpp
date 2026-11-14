@@ -92,7 +92,24 @@ GameList::GameList(FileSys::VirtualFilesystem vfs_, FileSys::ManualContentProvid
     connect(tree_view, &QTreeView::activated, this, &GameList::ValidateEntry);
     connect(tree_view, &QTreeView::customContextMenuRequested, this, &GameList::PopupContextMenu);
 
-    connect(grid_view, &QListView::activated, this, &GameList::ValidateEntry);
+    connect(grid_view, &QListView::doubleClicked, this, [this](const QModelIndex& index) {
+        if (suppress_grid_double_click) {
+            return;
+        }
+        ValidateEntry(index);
+    });
+    connect(grid_view, &QListView::clicked, this, [this](const QModelIndex& index) {
+        if (suppress_grid_double_click) {
+            return;
+        }
+        const auto type = index.data(GameListItem::TypeRole).value<GameListItemType>();
+        if (IsGameDirectoryType(type)) {
+            suppress_grid_double_click = true;
+            QTimer::singleShot(QApplication::doubleClickInterval(), this,
+                               [this] { suppress_grid_double_click = false; });
+            ValidateEntry(index);
+        }
+    });
     connect(grid_view, &QListView::customContextMenuRequested, this, &GameList::PopupContextMenu);
 
     connect(carousel_view, &QListView::activated, this, &GameList::ValidateEntry);

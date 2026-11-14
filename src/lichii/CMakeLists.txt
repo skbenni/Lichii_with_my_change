@@ -176,6 +176,9 @@ add_executable(lichii
     hotkeys.h
     install_dialog.cpp
     install_dialog.h
+    classic_loading_screen.cpp
+    classic_loading_screen.h
+    classic_loading_screen.ui
     loading_screen.cpp
     loading_screen.h
     loading_screen.ui
