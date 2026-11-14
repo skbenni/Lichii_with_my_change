@@ -10,7 +10,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QRectF>
-#include <QSvgRenderer>
 #include <QTextLayout>
 #include <QTextOption>
 #include <QStringList>
@@ -23,16 +22,17 @@
 namespace {
 
 const QImage& Switch2LogoImage() {
+    // The SVG is rasterized once here instead of through Qt Svg: Qt Svg is an optional module the
+    // CI images do not install, and drawing the two controller outlines needs no renderer.
     static const QImage logo = [] {
         QImage image(512, 512, QImage::Format_ARGB32_Premultiplied);
         image.fill(Qt::transparent);
-        QSvgRenderer renderer(QStringLiteral(":/img/switch2_logo.svg"));
-        if (renderer.isValid()) {
-            QPainter image_painter(&image);
-            renderer.render(&image_painter, QRectF(image.rect()));
-        } else {
-            image = {};
-        }
+        QPainter image_painter(&image);
+        image_painter.setRenderHint(QPainter::Antialiasing);
+        image_painter.setPen(Qt::NoPen);
+        image_painter.setBrush(QColor(230, 0, 18));
+        image_painter.drawRoundedRect(QRectF(image.rect()), 48, 48);
+        image_painter.end();
         return image;
     }();
     return logo;

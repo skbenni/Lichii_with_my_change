@@ -247,6 +247,25 @@ public:
         setData(card_picture, CardIconRole);
     }
 
+    /// Shows an image file as a game's picture in place, or the default art when it is not one.
+    static void SetPicture(QStandardItem* item, const std::vector<u8>& picture_data) {
+        if (item == nullptr || picture_data.empty()) {
+            return;
+        }
+        const u32 size = UISettings::CurrentGameIconSize().GetValue();
+        QPixmap picture;
+        const bool has_icon =
+            picture.loadFromData(picture_data.data(), static_cast<u32>(picture_data.size()));
+        if (!has_icon) {
+            picture = GetDefaultIcon(size);
+        }
+        item->setData(RoundedIcon(picture.scaled(size, size, Qt::IgnoreAspectRatio,
+                                                 Qt::SmoothTransformation)),
+                      Qt::DecorationRole);
+        item->setData(has_icon, HasIconRole);
+        item->setData(picture, CardIconRole);
+    }
+
     int type() const override {
         return static_cast<int>(GameListItemType::Game);
     }
