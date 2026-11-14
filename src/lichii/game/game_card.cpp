@@ -11,6 +11,8 @@
 #include <QPainterPath>
 #include <QRectF>
 #include <QSvgRenderer>
+#include <QTextLayout>
+#include <QTextOption>
 #include <QStringList>
 #include <QWidget>
 #include "game_card.h"

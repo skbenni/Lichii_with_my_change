@@ -12,7 +12,7 @@ if (LICHII_USE_BUNDLED_QT AND LINUX)
     set(CMAKE_BUILD_RPATH "${CMAKE_BINARY_DIR}/bin/lib/")
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Svg Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 if(LICHII_TESTS)
     add_subdirectory(../tests/qt_compatibility ${CMAKE_BINARY_DIR}/qt_compatibility_tests)
@@ -176,9 +176,6 @@ add_executable(lichii
     hotkeys.h
     install_dialog.cpp
     install_dialog.h
-    classic_loading_screen.cpp
-    classic_loading_screen.h
-    classic_loading_screen.ui
     loading_screen.cpp
     loading_screen.h
     loading_screen.ui
@@ -241,6 +238,7 @@ add_executable(lichii
     shader_warm_dialog.h shader_warm_dialog.cpp
     recommended_settings_dialog.h recommended_settings_dialog.cpp
     whats_new_dialog.h whats_new_dialog.cpp
+    bug_report_dialog.h bug_report_dialog.cpp
     first_run_setup_dialog.h first_run_setup_dialog.cpp
     migration_worker.h migration_worker.cpp
     libqt_common.h libqt_common.cpp
@@ -430,7 +428,7 @@ endif()
 
 target_link_libraries(lichii PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(lichii PRIVATE common core input_common frontend_common network video_core qt_common)
-target_link_libraries(lichii PRIVATE Boost::headers Qt6::Svg Qt6::Widgets Qt6::Concurrent Qt6::Network)
+target_link_libraries(lichii PRIVATE Boost::headers Qt6::Widgets Qt6::Concurrent Qt6::Network)
 # Unpacks NVIDIA's files from the Streamline release (nvidia_dlss_panel.cpp).
 target_link_libraries(lichii PRIVATE ZLIB::ZLIB)
 if (WIN32)

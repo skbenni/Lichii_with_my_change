@@ -34,6 +34,7 @@
 #include "video_core/engines/maxwell_3d.h"
 #include "video_core/nx2_fast_draw.h"
 #include "video_core/engines/maxwell_dma.h"
+#include "video_core/gpu_trace/recorder.h"
 #include "video_core/gpu.h"
 #include "video_core/pending_maps.h"
 #include "video_core/gpu_thread.h"
@@ -252,6 +253,8 @@ struct GPU::Impl {
 
     void NotifyShutdown() {
         gpu_thread.NotifyShutdown();
+        // Ends a recording while guest memory and the SMMU it holds references in still exist.
+        VideoCommon::GpuTrace::OnGpuShutdown();
         {
             // The GPU threads stopped: no sync operation runs anymore. Guest threads still run
             // until the kernel suspends them, and one waiting for a read's flush (OnCPURead)
@@ -289,8 +292,8 @@ struct GPU::Impl {
     // Queued without waiting, also with synchronous GPU: callers hold the nx2:gpu region, GPU
     // memory registry or address space lock, which the GPU thread takes when work queued earlier
     // writes into a lazily backed sparse region (BackSparseWrite).
-    void RunInOrder(std::function<void()>&& func) {
-        gpu_thread.Run(std::move(func), true);
+    void RunInOrder(std::function<void()>&& func, bool before_later_reads) {
+        gpu_thread.Run(std::move(func), true, before_later_reads);
     }
 
     void MapInOrder(GPUVAddr gpu_addr, u64 size, std::function<void()>&& func) {
@@ -358,6 +361,7 @@ struct GPU::Impl {
 
     /// Notify rasterizer that any caches of the specified region should be invalidated
     void InvalidateRegion(DAddr addr, u64 size, bool preserve_gpu_writes) {
+        VideoCommon::GpuTrace::NoteDeviceWrite(addr, size);
         if (preserve_gpu_writes) {
             VideoCore::RasterizerInterface* rasterizer = renderer->ReadRasterizer();
             if (!rasterizer->TryCacheInvalidation(addr, size)) {
@@ -383,6 +387,7 @@ struct GPU::Impl {
     }
 
     void RequestComposite(std::vector<Tegra::FramebufferConfig>&& layers, std::vector<Service::Nvidia::NvFence>&& fences) {
+        VideoCommon::GpuTrace::NotePresent(layers, fences);
         const size_t num_fences{fences.size()};
         size_t current_request_counter{};
         if (num_fences != 0) {
@@ -511,6 +516,15 @@ std::shared_ptr<Control::ChannelState> GPU::AllocateChannel() {
 
 void GPU::InitChannel(Control::ChannelState& to_init, u64 program_id) {
     impl->InitChannel(to_init, program_id);
+}
+
+std::vector<std::shared_ptr<Control::ChannelState>> GPU::Channels() const {
+    std::vector<std::shared_ptr<Control::ChannelState>> channels;
+    for (const auto& [id, channel] : impl->channels) {
+        channels.push_back(channel);
+    }
+    std::ranges::sort(channels, {}, [](const auto& channel) { return channel->bind_id; });
+    return channels;
 }
 
 void GPU::BindChannel(s32 channel_id) {
@@ -691,8 +705,8 @@ void GPU::FlushRegion(DAddr addr, u64 size) {
     impl->FlushRegion(addr, size);
 }
 
-void GPU::RunInOrder(std::function<void()>&& func) {
-    impl->RunInOrder(std::move(func));
+void GPU::RunInOrder(std::function<void()>&& func, bool before_later_reads) {
+    impl->RunInOrder(std::move(func), before_later_reads);
 }
 
 void GPU::MapInOrder(GPUVAddr gpu_addr, u64 size, std::function<void()>&& func) {

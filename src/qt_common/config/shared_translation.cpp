@@ -396,12 +396,10 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
               "files internally."));
     INSERT(Settings, precache_shaders, tr("Precache shaders before game start:"),
            tr("Builds shaders on the loading screen, on every CPU thread, so they don't stutter "
-              "the first time the game uses them: the compute shaders found in the game files, "
-              "and the shaders saved by earlier play sessions that the normal shader loading "
-              "leaves for later. The first launch reads the game files and takes a few minutes; "
-              "later launches only build what is new, until the GPU driver changes. The loading "
-              "screen has a Skip button.\nAsk asks at launch while the game has never been "
-              "precached."));
+              "the first time the game uses them: the compute shaders found in the game files. "
+              "The first launch reads the game files and takes a few minutes; later launches "
+              "only build what is new, until the GPU driver changes. The loading screen has a "
+              "Skip button.\nAsk asks at launch while the game has never been precached."));
     INSERT(Settings, build_all_cached_shaders, tr("Build all cached shaders before game start"),
            tr("Builds every shader saved by earlier play sessions on the loading screen and keeps "
               "them built, so places you visited long ago don't stutter. Without it, only the "
@@ -432,6 +430,15 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
               "unlocked."));
     INSERT(Settings, mkw_30fps, tr("Mario Kart World: 30 FPS mode"),
            tr("Forces the game to use its native 30 FPS mode at normal game speed. "
+              "Takes effect after restarting the game."));
+    INSERT(Settings, mkw_60fps, tr("Mario Kart World: 60 FPS mode"),
+           tr("Forces the game's 60 FPS mode everywhere, not only in cutscenes. The game "
+              "advances one 60 FPS step per frame, so it never runs fast. Takes effect after "
+              "restarting the game and takes precedence over the 30 FPS mode."));
+    INSERT(Settings, mkw_60fps_fallback, tr("Mario Kart World: drop to 30 FPS when slow"),
+           tr("Only applies with the 60 FPS mode. When your PC can't hold 60 FPS, the game "
+              "switches to its 30 FPS mode and keeps normal speed, then tries 60 again every few "
+              "seconds. Turn it off to stay at 60 FPS, where slow frames play in slow motion. "
               "Takes effect after restarting the game."));
     INSERT(Settings, mkw_dynamic_fps, tr("Mario Kart World: dynamic FPS (experimental)"),
            tr("Lets the game adjust between 30 and 60 FPS using whole-frame timing to maintain "

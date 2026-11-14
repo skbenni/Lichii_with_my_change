@@ -30,7 +30,6 @@
 #include "qt_common/util/game.h"
 #include "lichii/compatibility_report.h"
 #include "lichii/hotkeys.h"
-#include "lichii/loading_screen.h"
 #include "lichii/user_data_migration.h"
 
 #ifdef __unix__
@@ -51,7 +50,9 @@ class EmuThread;
 class GameList;
 class GImageInfo;
 class GRenderWindow;
+class LoadingScreen;
 class OverlayDialog;
+class BugReportDialog;
 class ClassicLoadingScreen;
 class ControllerDialog;
 class QLabel;
@@ -295,7 +296,7 @@ private:
                   StartGameType with_config = StartGameType::Normal);
     void BootGameFromList(const QString& filename, StartGameType with_config);
     void ShutdownGame();
-    void TerminateEmulationThread();
+    void ExitIfEmulationThreadStuck();
 
     void SetDiscordEnabled(bool state);
     void LoadAmiibo(const QString& filename);
@@ -441,7 +442,7 @@ private slots:
     void ResetWindowSize900();
     void ResetWindowSize1080();
 
-    void SetGameListMode(Settings::GameListMode mode, bool update_library_style = true);
+    void SetGameListMode(Settings::GameListMode mode);
     void SetGridView();
     void SetTreeView();
     void SetCarouselView();
@@ -453,6 +454,7 @@ private slots:
     void OnCreateHomeMenuDesktopShortcut();
     void OnCreateHomeMenuApplicationMenuShortcut();
     void OnCaptureScreenshot();
+    void OnReportBug();
     /// Checks for decryption keys; `prompt` asks to install them when they are missing.
     void OnCheckFirmwareDecryption(bool prompt = true);
 #ifdef __unix__
@@ -468,10 +470,6 @@ private slots:
     /// True while the emulation thread's teardown still makes progress (Common::ShutdownProgress
     /// moved since the last call), for at most MaxEmuThreadShutdownMs after it was asked to stop.
     bool EmulationShutdownProgressing();
-
-    /// Shows the first-run setup for theme and library style, then records the choices (the
-    /// library style fallback when the dialog is dismissed).
-    void PromptFirstRunSetup();
 
 #ifdef ENABLE_UPDATE_CHECKER
     void OnEmulatorUpdateAvailable();
@@ -541,26 +539,28 @@ private:
 #endif
 
     MultiplayerState* multiplayer_state = nullptr;
+    void RememberSpeedLimitBeforeHotkey();
+    void UndoSessionSpeedChanges();
+    /// The speed limit before the session's first Toggle Framerate Limit / turbo / slow hotkey,
+    /// and whether it was the global or the per-game value. Undone when the game stops, so the
+    /// hotkeys only last for the session; a change made in the configuration dialogs is kept.
+    struct SessionSpeedLimit {
+        bool value;
+        bool using_global;
+    };
+    std::optional<SessionSpeedLimit> speed_limit_before_hotkeys;
 
     GRenderWindow* render_window = nullptr;
     GameList* game_list = nullptr;
     LoadingScreen* loading_screen = nullptr;
-    /// The original loading screen and closing dialog, used by every theme but Lichii Modern.
-    ClassicLoadingScreen* classic_loading_screen = nullptr;
-    OverlayDialog* shutdown_dialog{};
-    /// Whether the running game uses the modern loading screen, chosen when it boots.
-    bool modern_loading_screen = true;
-    /// Artwork captured before emulation starts, so shutdown never reads a loader being torn down.
-    LoadingScreen::Snapshot closing_snapshot;
-    /// Set when a direct launch skipped the first-run setup; the setup is shown once the
-    /// interactive library session comes back.
-    bool deferred_library_style_prompt = false;
     QTimer shutdown_timer;
     QTimer emu_terminate_timer;
     QElapsedTimer emu_force_stop_clock;
     u64 shutdown_progress_seen{};
     QTimer nextendo_session_timer;
     QFutureWatcher<bool> nextendo_session_watcher;
+    OverlayDialog* shutdown_dialog{};
+    BugReportDialog* bug_report_dialog{};
     PerformanceOverlay* perf_overlay = nullptr;
 #ifdef HAS_RESHADE
     ConfigurePostProcessing* post_processing_dialog = nullptr;

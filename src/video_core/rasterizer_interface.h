@@ -166,35 +166,6 @@ public:
         }
     }
 
-    /// Switch 2, list-fed grid macros (nx2_list_grid.h): whether the back keeps list words and
-    /// dispatches from them, so the front may take such lists without reading them.
-    [[nodiscard]] virtual bool Nx2ListGridSupported() const {
-        return false;
-    }
-    /// On the split's back, at the list's place in the stream: copies the three words at
-    /// `address` into a kept-words slot as `keep_id`. Verify mode: `real` are the words as the
-    /// front read them the old way for the macro `hash`, else empty.
-    virtual void Nx2KeepListWords([[maybe_unused]] u64 keep_id, [[maybe_unused]] GPUVAddr address,
-                                  [[maybe_unused]] u64 hash,
-                                  [[maybe_unused]] std::span<const u32> real) {}
-    /// On the split's back, before the inline write that carries it: the word at `device_addr`
-    /// will be the marker of word `index` of list `keep_id`, to be patched from its kept copy.
-    virtual void Nx2ExpectKeptWord([[maybe_unused]] DAddr device_addr,
-                                   [[maybe_unused]] u64 keep_id, [[maybe_unused]] u32 index) {}
-    /// On the split's back: the words kept as `keep_id`, after waiting for the host GPU's copy.
-    /// False if none are kept, or a later list took the slot.
-    [[nodiscard]] virtual bool Nx2ReadKeptListWords([[maybe_unused]] u64 keep_id,
-                                                    [[maybe_unused]] std::span<u32> words) {
-        return false;
-    }
-    /// On the split's back: the keep id of the list grid word `marker` at `device_addr` (in
-    /// guest memory) stands for, if the back patched that word from the list and still keeps it
-    /// (Nx2ListGrid::QmdWordList).
-    [[nodiscard]] virtual std::optional<u64> Nx2FindKeptWord([[maybe_unused]] DAddr device_addr,
-                                                             [[maybe_unused]] u32 marker) {
-        return std::nullopt;
-    }
-
     /// Check if the the specified memory area requires flushing to CPU Memory.
     virtual bool MustFlushRegion(DAddr addr, u64 size,
                                  VideoCommon::CacheType which = VideoCommon::CacheType::All) = 0;
@@ -328,8 +299,11 @@ public:
 
     /// Records a health check of a game's DLSS network output (dst) against its input (src) and
     /// returns the result of an earlier check once the GPU has finished it.
+    /// `src_region` is the part of src the game rendered, from its top-left corner (a dynamic
+    /// resolution network's render region); without it, the whole of src.
     [[nodiscard]] virtual std::optional<VideoCore::GameDlssProbe> ProbeGameDlssOutput(
-        const Tegra::Engines::Fermi2D::Surface& src, const Tegra::Engines::Fermi2D::Surface& dst) {
+        const Tegra::Engines::Fermi2D::Surface& src, const Tegra::Engines::Fermi2D::Surface& dst,
+        std::optional<std::array<u32, 2>> src_region = std::nullopt) {
         return std::nullopt;
     }
 

@@ -4,6 +4,7 @@
 #include <optional>
 #include <array>
 #include <cstdlib>
+#include <chrono>
 #include <atomic>
 #include <memory>
 #include <new>
@@ -80,6 +81,7 @@
 #include "hid_core/hid_core.h"
 #include "network/network.h"
 #include "video_core/host1x/host1x.h"
+#include "video_core/nx2_debug_control.h"
 #include "video_core/nx2_stutter_trace.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
@@ -89,7 +91,15 @@ namespace Core {
 std::atomic<u64> g_nx2_present_count{};
 static_assert(std::atomic<u64>::is_always_lock_free);
 std::array<std::atomic<u64>, 4096> g_nx2_present_times_ns{};
-std::atomic<u32> g_nx2_present_time_services{};
+
+void RecordGuestPresent() {
+    const u64 present = g_nx2_present_count.fetch_add(1, std::memory_order_relaxed) + 1;
+    const u64 present_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+    g_nx2_present_times_ns[present % g_nx2_present_times_ns.size()].store(
+        present_ns, std::memory_order_relaxed);
+}
 
 FileSys::VirtualFile GetGameFileFromPath(const FileSys::VirtualFilesystem& vfs,
                                          const std::string& path) {
@@ -398,6 +408,21 @@ struct System::Impl {
         return SystemResultStatus::Success;
     }
 
+    SystemResultStatus InitializeForGpuReplay(System& system, Frontend::EmuWindow& emu_window,
+                                              u64 replay_program_id) {
+        if (const auto result = InitializeKernel(system); result != SystemResultStatus::Success) {
+            return result;
+        }
+        host1x_core.emplace(system);
+        VideoCore::CreateGPU(gpu_core, emu_window, system);
+        if (!gpu_core) {
+            return SystemResultStatus::ErrorVideoCore;
+        }
+        is_powered_on = true;
+        perf_stats.emplace(replay_program_id);
+        return SystemResultStatus::Success;
+    }
+
     SystemResultStatus SetupForApplicationProcess(System& system, Frontend::EmuWindow& emu_window) {
         host1x_core.emplace(system);
         VideoCore::CreateGPU(gpu_core, emu_window, system);
@@ -578,12 +603,14 @@ struct System::Impl {
             game_info.version = title_version;
             room_member->SendGameInfo(game_info);
         }
+        VideoCore::Nx2Debug::BeginSession();
         debug_service = Nx2Debug::MaybeStartService(system, name, params.program_id);
         Nx2Sampler::StartFromEnvironment();
         return SystemResultStatus::Success;
     }
 
     void ShutdownMainProcess() {
+        VideoCore::Nx2Debug::EndSession();
         debug_service.reset();
         SetShuttingDown(true);
         Common::ADPF::Shutdown();
@@ -606,7 +633,13 @@ struct System::Impl {
         core_timing.SyncPause(false);
         Network::CancelPendingSocketOperations();
         kernel.SuspendEmulation(true);
+        if (service_manager) {
+            // Services on host threads that still wait for one on the guest cores give up (after
+            // a close during the boot shader load, the guest cores never started).
+            service_manager->Close();
+        }
         kernel.CloseServices();
+        applet_manager.DropPendingProcess();
         kernel.ShutdownCores();
         // Each step done tells the frontend the teardown still moves (see
         // Common::ShutdownProgress); the GPU's (pipeline caches) reports its own steps.
@@ -807,6 +840,11 @@ bool System::GetNVDECActive() {
 
 void System::InitializeDebugger() {
     impl->InitializeDebugger(*this, Settings::values.gdbstub_port.GetValue());
+}
+
+SystemResultStatus System::InitializeForGpuReplay(Frontend::EmuWindow& emu_window,
+                                                  u64 program_id) {
+    return impl->InitializeForGpuReplay(*this, emu_window, program_id);
 }
 
 SystemResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::string& filepath,

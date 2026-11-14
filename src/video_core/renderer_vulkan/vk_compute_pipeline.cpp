@@ -212,12 +212,14 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
                                  PipelineStatistics* pipeline_statistics,
                                  VideoCore::ShaderNotify* shader_notify, const Shader::Info& info_,
                                  vk::ShaderModule spv_module_, u64 shader_hash_,
-                                 std::function<vk::ShaderModule()> emit)
+                                 std::vector<u8> kept_spirv_,
+                                 std::function<vk::ShaderModule(std::vector<u8>&)> emit)
     : device{device_},
       pipeline_cache(pipeline_cache_), binaries{binaries_}, binary_key{binary_key_},
       guest_descriptor_queue{guest_descriptor_queue_},
       descriptor_buffer_ring{descriptor_buffer_ring_}, info{info_},
-      shader_hash{shader_hash_}, spv_module(std::move(spv_module_)) {
+      shader_hash{shader_hash_}, spv_module(std::move(spv_module_)),
+      kept_spirv(std::move(kept_spirv_)) {
     if (shader_notify) {
         shader_notify->MarkShaderBuilding();
     }
@@ -262,10 +264,10 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
         };
         // Only warp-level ops observe the subgroup size. Forcing 32 on other shaders makes Intel
         // compile SIMD32, which can spill a register-heavy kernel for minutes (Mario Kart World).
-        // A shader that lost a conditional barrier relies on a whole warp running in step: at a
-        // smaller subgroup size it reads stale shared memory, which shows as banding over the image
-        // in Mario Kart World on Intel's Windows driver.
-        const bool uses_warp_ops = info.removed_conditional_barrier ||
+        // A shader whose divergent barrier lost its execution barrier relies on a whole warp
+        // running in step: at a smaller subgroup size it reads stale shared memory, which shows as
+        // banding over the image in Mario Kart World on Intel's Windows driver.
+        const bool uses_warp_ops = info.demoted_conditional_barrier ||
                                    info.uses_subgroup_vote || info.uses_subgroup_invocation_id ||
                                    info.uses_subgroup_shuffles || info.uses_subgroup_mask ||
                                    info.uses_quad_shuffles || info.uses_fswzadd ||
@@ -375,7 +377,7 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
                     }
                 };
                 try {
-                    spv_module = emit();
+                    spv_module = emit(kept_spirv);
                 } catch (const std::exception& exception) {
                     fail(exception.what());
                     return {};
@@ -707,6 +709,7 @@ bool ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
         // Wait for the pipeline to be built
         scheduler.Record([this](vk::CommandBuffer) {
             const VideoCommon::Nx2Profile::Scope scope{VideoCommon::Nx2Profile::Zone::PipelineWait};
+            const auto begin = std::chrono::steady_clock::now();
             if (jobs) {
                 // Raised to NeedNow, and built here unless a driver worker builds it already
                 jobs->RunOrWait(job);
@@ -716,8 +719,17 @@ bool ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
             } else {
                 RunBuild();
             }
-            std::unique_lock lock{build_mutex};
-            build_condvar.wait(lock, [this] { return is_built.load(std::memory_order::relaxed); });
+            {
+                std::unique_lock lock{build_mutex};
+                build_condvar.wait(lock,
+                                   [this] { return is_built.load(std::memory_order::relaxed); });
+            }
+            // Every GPU channel waits with the dispatch, so long waits are freezes.
+            const auto waited = std::chrono::steady_clock::now() - begin;
+            if (waited > std::chrono::milliseconds{50}) {
+                LOG_INFO(Render_Vulkan, "Compute dispatch waited {:.1f} ms for pipeline {:016x}",
+                         std::chrono::duration<double, std::milli>(waited).count(), shader_hash);
+            }
         });
     }
 

@@ -8,8 +8,14 @@
 #include <array>
 #include <memory>
 #include <tuple>
+#include <QPushButton>
+#include <QScreen>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QStackedWidget>
 #include <QStyle>
+#include <QTabBar>
+#include <QTimer>
 #include "common/logging.h"
 #include "common/settings.h"
 #include "common/settings_enums.h"
@@ -71,8 +77,6 @@ ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry_,
     Settings::SetConfiguringGlobal(true);
 
     ui->setupUi(this);
-    SetModernStyleEnabled(UISettings::values.game_library_style.GetValue() ==
-                          static_cast<u8>(UISettings::GameLibraryStyle::Modern));
 
     ui->tabWidget->addTab(applets_tab.get(), tr("Applets"));
     ui->tabWidget->addTab(audio_tab.get(), tr("Audio"));
@@ -127,13 +131,16 @@ ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry_,
 
     PopulateSelectionList();
 
-    connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+    
+    connect(ui_tab.get(), &ConfigureUi::GameLibraryStyleChanged, this,
+            &ConfigureDialog::SetModernStyleEnabled);
+connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
         if (index != -1) {
             debug_tab_tab->SetCurrentIndex(0);
         }
     });
-    connect(ui_tab.get(), &ConfigureUi::GameLibraryStyleChanged, this,
-            &ConfigureDialog::SetModernStyleEnabled);
+    connect(ui->tabWidget, &QTabWidget::currentChanged, this,
+            [this] { QTimer::singleShot(0, this, &ConfigureDialog::FitPageWidth); });
     connect(ui_tab.get(), &ConfigureUi::LanguageChanged, this, &ConfigureDialog::OnLanguageChanged);
     connect(general_tab.get(), &ConfigureGeneral::ExternalContentDirsChanged, this,
             &ConfigureDialog::ExternalContentDirsChanged);
@@ -188,6 +195,75 @@ void ConfigureDialog::changeEvent(QEvent* event) {
     QDialog::changeEvent(event);
 }
 
+void ConfigureDialog::showEvent(QShowEvent* event) {
+    QDialog::showEvent(event);
+    QTimer::singleShot(0, this, &ConfigureDialog::FitPageWidth);
+}
+
+void ConfigureDialog::FitPageWidth() {
+    if (!isVisible()) {
+        return;
+    }
+    auto* const area = qobject_cast<QScrollArea*>(ui->tabWidget->currentWidget());
+    if (area == nullptr || area->widget() == nullptr || area->parentWidget() == nullptr) {
+        return;
+    }
+    QWidget* const page = area->widget();
+    // The stacked holder has the same size for every tab, also for one not laid out yet.
+    const QWidget* const holder = area->parentWidget();
+
+    const auto missing_width = [&] {
+        const QSize page_min = page->minimumSizeHint().expandedTo(page->minimumSize());
+        int view_width = holder->width() - 2 * area->frameWidth();
+        if (page_min.height() > holder->height()) {
+            view_width -= area->verticalScrollBar()->sizeHint().width();
+        }
+        const int page_missing = page_min.width() - view_width;
+        const int tabs_missing = ui->tabWidget->tabBar()->sizeHint().width() - holder->width();
+        return std::max(page_missing, tabs_missing);
+    };
+
+    const int missing = missing_width();
+    if (missing <= 0) {
+        return;
+    }
+
+    const QScreen* const current_screen = screen();
+    if (current_screen == nullptr) {
+        return;
+    }
+    const QRect available = current_screen->availableGeometry();
+    const int frame_extra = frameGeometry().width() - width();
+    const int max_width = available.width() * 95 / 100 - frame_extra;
+    const int wanted_width = width() + missing;
+    const int new_width = std::min(wanted_width, max_width);
+
+    if (new_width > width()) {
+        // Grow around the current center, then keep the whole frame on the screen.
+        const int grow = new_width - width();
+        resize(new_width, height());
+        QRect frame = frameGeometry();
+        frame.moveLeft(frame.left() - grow / 2);
+        if (frame.right() > available.right()) {
+            frame.moveRight(available.right());
+        }
+        if (frame.left() < available.left()) {
+            frame.moveLeft(available.left());
+        }
+        move(frame.topLeft());
+    }
+
+    if (wanted_width > new_width && !page->property("compactPage").toBool()) {
+        // Even the screen is too narrow: use tighter buttons so less of the page scrolls.
+        page->setProperty("compactPage", true);
+        for (auto* const button : page->findChildren<QPushButton*>()) {
+            button->style()->unpolish(button);
+            button->style()->polish(button);
+        }
+        page->updateGeometry();
+    }
+}
+
 void ConfigureDialog::RetranslateUI() {
     const int old_row = ui->selectorList->currentRow();
     const int old_index = ui->tabWidget->currentIndex();
@@ -204,23 +280,6 @@ void ConfigureDialog::RetranslateUI() {
 void ConfigureDialog::HandleApplyButtonClicked() {
     UISettings::values.configuration_applied = true;
     ApplyConfiguration();
-}
-
-void ConfigureDialog::SetModernStyleEnabled(bool enabled) {
-    if (property("modernLibrary").toBool() == enabled) {
-        return;
-    }
-
-    setProperty("modernLibrary", enabled);
-    const auto repolish = [](QWidget* widget) {
-        widget->style()->unpolish(widget);
-        widget->style()->polish(widget);
-        widget->update();
-    };
-    repolish(this);
-    for (auto* widget : findChildren<QWidget*>()) {
-        repolish(widget);
-    }
 }
 
 Q_DECLARE_METATYPE(QList<QWidget*>);
@@ -286,4 +345,6 @@ void ConfigureDialog::UpdateVisibleTabs() {
                               ConfigurationShared::PageIcon(tab->property("tabIcon").toString()),
                               tab->accessibleName());
     }
+
+    QTimer::singleShot(0, this, &ConfigureDialog::FitPageWidth);
 }
