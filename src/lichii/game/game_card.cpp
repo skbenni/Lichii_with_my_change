@@ -236,7 +236,7 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
                 std::max<u32>(UISettings::CurrentGameIconSize().GetValue(), u32{384}));
             pending_card_art.insert(card_icon_key);
             auto* watcher = new QFutureWatcher<QImage>(const_cast<GameCard*>(this));
-            QPointer<QWidget> widget = option.widget;
+            QPointer<QWidget> widget = const_cast<QWidget*>(option.widget);
             connect(watcher, &QFutureWatcher<QImage>::finished, this,
                     [this, watcher, card_icon_key, widget] {
                         const QImage decoded = watcher->result();

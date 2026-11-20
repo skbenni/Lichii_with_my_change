@@ -480,6 +480,7 @@ private slots:
     /// Shows the first-run setup for theme and library style, then records the choices (the
     /// library style fallback when the dialog is dismissed).
     void PromptFirstRunSetup();
+    void ScheduleDeferredLibraryStylePrompt();
 
 #ifdef ENABLE_UPDATE_CHECKER
     // A manual check reports every outcome and ignores the skipped release and remind-later time.
@@ -586,6 +587,7 @@ private:
     /// Set when a direct launch skipped the first-run setup; the setup is shown once the
     /// interactive library session comes back.
     bool deferred_library_style_prompt = false;
+    bool session_handoff_in_progress = false;
     QTimer shutdown_timer;
     QTimer emu_terminate_timer;
     QElapsedTimer emu_force_stop_clock;

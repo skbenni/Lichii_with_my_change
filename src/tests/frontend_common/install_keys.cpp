@@ -81,6 +81,19 @@ TEST_CASE("Installing the keys already in the keys folder does not copy them ont
     CHECK(ReadFile(prod_keys) == "header_key = 00\n");
 }
 
+TEST_CASE("Reinstalling installed prod.keys does not duplicate its contents",
+          "[frontend_common][install_keys]") {
+    const KeysDirectory directory;
+    const auto valid_keys = ValidProdKeys();
+    const auto prod_keys = directory.keys / "prod.keys";
+    WriteFile(prod_keys, valid_keys.c_str());
+
+    FirmwareManager::KeyInstallResult result{};
+    REQUIRE_NOTHROW(result = FirmwareManager::InstallKeys(prod_keys.string(), "keys"));
+    CHECK(result == FirmwareManager::Success);
+    CHECK(ReadFile(prod_keys) == valid_keys);
+}
+
 TEST_CASE("Installing keys from another folder copies them into the keys folder",
           "[frontend_common][install_keys]") {
     const KeysDirectory directory;
@@ -96,7 +109,7 @@ TEST_CASE("Installing keys from another folder copies them into the keys folder"
     FirmwareManager::KeyInstallResult result{};
     REQUIRE_NOTHROW(result = FirmwareManager::InstallKeys((source / "prod.keys").string(), "keys"));
     CHECK(result == FirmwareManager::Success);
-    CHECK(ReadFile(directory.keys / "prod.keys") == valid_keys);
+    CHECK(ReadFile(directory.keys / "prod.keys") == std::string("header_key = 00\n") + valid_keys);
     CHECK(ReadFile(directory.keys / "title.keys") == "0100000000000000 = 11\n");
 }
 

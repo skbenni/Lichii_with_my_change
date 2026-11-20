@@ -782,33 +782,11 @@ MainWindow::MainWindow(bool has_broken_vulkan)
     nextendo_session_timer.start(std::chrono::minutes{2});
     KeepNextendoSessionAlive();
 
-    const auto schedule_deferred_setup = [this] {
-        if (!deferred_library_style_prompt || emulation_running || boot_in_progress ||
-            close_pending) {
-            return;
-        }
-        QTimer::singleShot(0, this, [this] {
-            if (!deferred_library_style_prompt || emulation_running || boot_in_progress ||
-                close_pending) {
-                return;
-            }
-            deferred_library_style_prompt = false;
-            if (!UISettings::values.has_selected_game_library_style.GetValue() ||
-                UISettings::values.first_start.GetValue()) {
-                PromptFirstRunSetup();
-                SetGameListMode(UISettings::values.game_list_mode.GetValue(), false);
-                game_list->SetScanEnabled(true);
-                game_list->PopulateAsync(UISettings::values.game_dirs);
-            }
-        });
-    };
-
     if (launch_home) {
         startup_qlaunch_connection = connect(
-            game_list, &GameList::PopulatingCompleted, this,
-            [this, schedule_deferred_setup] {
+            game_list, &GameList::PopulatingCompleted, this, [this] {
                 LaunchFirmwareApplet(u64(Service::AM::AppletProgramId::QLaunch), std::nullopt);
-                schedule_deferred_setup();
+                ScheduleDeferredLibraryStylePrompt();
             },
             Qt::SingleShotConnection);
         game_list->PopulateAsync(UISettings::values.game_dirs);
@@ -837,8 +815,29 @@ MainWindow::MainWindow(bool has_broken_vulkan)
     }
 
     if (!launch_home) {
-        schedule_deferred_setup();
+        ScheduleDeferredLibraryStylePrompt();
     }
+}
+
+void MainWindow::ScheduleDeferredLibraryStylePrompt() {
+    if (!deferred_library_style_prompt || emulation_running || boot_in_progress ||
+        session_handoff_in_progress || close_pending) {
+        return;
+    }
+    QTimer::singleShot(0, this, [this] {
+        if (!deferred_library_style_prompt || emulation_running || boot_in_progress ||
+            session_handoff_in_progress || close_pending) {
+            return;
+        }
+        deferred_library_style_prompt = false;
+        if (!UISettings::values.has_selected_game_library_style.GetValue() ||
+            UISettings::values.first_start.GetValue()) {
+            PromptFirstRunSetup();
+            SetGameListMode(UISettings::values.game_list_mode.GetValue(), false);
+            game_list->SetScanEnabled(true);
+            game_list->PopulateAsync(UISettings::values.game_dirs);
+        }
+    });
 }
 
 void MainWindow::PromptFirstRunSetup() {
@@ -2479,6 +2478,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
         if (!emulation_running && !close_pending) {
             game_list->SetScanEnabled(true);
             game_list->PopulateAsync(UISettings::values.game_dirs);
+            ScheduleDeferredLibraryStylePrompt();
         }
         if (close_pending) {
             QTimer::singleShot(0, this, &QWidget::close);
@@ -3162,14 +3162,9 @@ void MainWindow::OnEmulationStopped() {
     LOG_INFO(Frontend, "Emulation cleanup completed");
     if (close_pending) {
         QTimer::singleShot(0, this, &QWidget::close);
-    } else if (!boot_in_progress) {
+    } else if (!boot_in_progress && !session_handoff_in_progress) {
         if (deferred_library_style_prompt && isVisible()) {
-            deferred_library_style_prompt = false;
-            if (!UISettings::values.has_selected_game_library_style.GetValue() ||
-                UISettings::values.first_start.GetValue()) {
-                PromptFirstRunSetup();
-                SetGameListMode(UISettings::values.game_list_mode.GetValue(), false);
-            }
+            ScheduleDeferredLibraryStylePrompt();
         }
         game_list->SetScanEnabled(true);
         game_list->PopulateAsync(UISettings::values.game_dirs);
@@ -4174,6 +4169,11 @@ void MainWindow::OnLaunchInNewSession(u64 program_id) {
     }
     LOG_INFO(Frontend, "HOME Menu launch of {:016X} in a new session from {}", program_id,
              filename.toStdString());
+    session_handoff_in_progress = true;
+    SCOPE_EXIT {
+        session_handoff_in_progress = false;
+        ScheduleDeferredLibraryStylePrompt();
+    };
     ShutdownGame();
 
     auto params = ApplicationAppletParameters();

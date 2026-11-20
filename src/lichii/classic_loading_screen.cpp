@@ -14,6 +14,7 @@
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QStyleOption>
+#include <QTime>
 #include "common/container/unordered_map.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "core/loader/loader.h"

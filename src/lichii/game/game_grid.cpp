@@ -73,6 +73,7 @@ void GameGrid::SetModel(GameListModel* model) {
 void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model) {
     last_filter_text = edit_filter_text;
     int row_count = model->rowCount();
+    bool has_games = false;
 
     for (int i = 0; i < row_count; ++i) {
         QStandardItem* item = model->item(i, 0);
@@ -80,6 +81,9 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
             continue;
 
         const auto type = item->data(GameListItem::TypeRole).value<GameListItemType>();
+        if (type == GameListItemType::Game) {
+            has_games = true;
+        }
         bool visible = false;
         if (browsed_dir >= 0) {
             if (type == GameListItemType::Game) {
@@ -102,6 +106,18 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
         }
 
         setRowHidden(i, !visible);
+    }
+
+    if (browsed_dir < 0 && !has_games) {
+        for (int i = 0; i < row_count; ++i) {
+            QStandardItem* item = model->item(i, 0);
+            if (!item)
+                continue;
+            const auto type = item->data(GameListItem::TypeRole).value<GameListItemType>();
+            if (type == GameListItemType::AddDir) {
+                setRowHidden(i, false);
+            }
+        }
     }
 
     const QModelIndex current = currentIndex();
