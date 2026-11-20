@@ -1508,6 +1508,9 @@ void GraphicsPipeline::CheckColorFeedbackLoop(std::span<const VideoCommon::Image
 bool GraphicsPipeline::ConfigureDraw(const RescalingPushConstant& rescaling,
                                      const RenderAreaPushConstant& render_area,
                                      std::optional<PreparedBinding>* deferred) {
+    if (guest_descriptor_queue.HasRejectedTexelBuffer()) {
+        return false;
+    }
     if (guest_descriptor_queue.UpdateCount() != num_descriptor_entries) {
         LOG_CRITICAL(Render_Vulkan, "Graphics descriptor count mismatch: expected {}, got {}",
                      num_descriptor_entries, guest_descriptor_queue.UpdateCount());

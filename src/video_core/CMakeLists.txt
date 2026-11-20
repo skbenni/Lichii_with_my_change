@@ -229,6 +229,7 @@ add_library(video_core STATIC
     renderer_vulkan/vk_buffer_cache_base.cpp
     renderer_vulkan/vk_buffer_cache.cpp
     renderer_vulkan/vk_buffer_cache.h
+    renderer_vulkan/vk_texel_buffer_range.h
     renderer_vulkan/vk_command_pool.cpp
     renderer_vulkan/vk_command_pool.h
     renderer_vulkan/vk_compute_pass.cpp

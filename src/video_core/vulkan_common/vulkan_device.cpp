@@ -1415,6 +1415,20 @@ bool Device::IsFormatSupported(VkFormat wanted_format, VkFormatFeatureFlags want
     return (supported_usage & wanted_usage) == wanted_usage;
 }
 
+VkDeviceSize Device::GetTexelBufferOffsetAlignment(VkDeviceSize texel_alignment) const {
+    const auto& limits = properties.texel_buffer_alignment;
+    if (limits.sType == 0) {
+        return properties.properties.limits.minTexelBufferOffsetAlignment;
+    }
+    const auto effective = [texel_alignment](VkDeviceSize alignment, VkBool32 single_texel) {
+        return single_texel ? (std::min)(alignment, texel_alignment) : alignment;
+    };
+    return (std::max)(effective(limits.uniformTexelBufferOffsetAlignmentBytes,
+                                limits.uniformTexelBufferOffsetSingleTexelAlignment),
+                      effective(limits.storageTexelBufferOffsetAlignmentBytes,
+                                limits.storageTexelBufferOffsetSingleTexelAlignment));
+}
+
 std::string Device::GetDriverName() const {
     return vk::GetDriverName(properties.driver);
 }
@@ -1801,6 +1815,12 @@ bool Device::GetSuitability(bool requires_swapchain) {
         properties.subgroup_size_control.sType =
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES;
         SetNext(next, properties.subgroup_size_control);
+    }
+    if (instance_version >= VK_API_VERSION_1_3 ||
+        features.texel_buffer_alignment.texelBufferAlignment) {
+        properties.texel_buffer_alignment.sType =
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES;
+        SetNext(next, properties.texel_buffer_alignment);
     }
     if (extensions.transform_feedback) {
         properties.transform_feedback.sType =
