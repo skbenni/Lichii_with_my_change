@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QAbstractItemView>
 #include <QColor>
 #include <QFutureWatcher>
 #include <QFileInfo>
@@ -227,7 +228,7 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
     const bool has_icon = !game_folder && !add_folder &&
                           index.data(GameListItemPath::HasIconRole).toBool();
     QPixmap icon_pixmap;
-    if (has_icon && !card_icon_key.isEmpty()) {
+    if (icon_size > 0 && has_icon && !card_icon_key.isEmpty()) {
         icon_pixmap = GameListItemPath::CardArtCache::Lookup(card_icon_key);
         if (icon_pixmap.isNull() && !pending_card_art.contains(card_icon_key)) {
             const QByteArray card_art_data =
@@ -236,15 +237,18 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
                 std::max<u32>(UISettings::CurrentGameIconSize().GetValue(), u32{384}));
             pending_card_art.insert(card_icon_key);
             auto* watcher = new QFutureWatcher<QImage>(const_cast<GameCard*>(this));
-            QPointer<QWidget> widget = const_cast<QWidget*>(option.widget);
+            QPointer<QWidget> viewport;
+            if (const auto* view = qobject_cast<const QAbstractItemView*>(option.widget)) {
+                viewport = view->viewport();
+            }
             connect(watcher, &QFutureWatcher<QImage>::finished, this,
-                    [this, watcher, card_icon_key, widget] {
+                    [this, watcher, card_icon_key, viewport] {
                         const QImage decoded = watcher->result();
                         if (!decoded.isNull()) {
                             GameListItemPath::CardArtCache::Insert(card_icon_key,
                                                                    QPixmap::fromImage(decoded));
-                            if (widget) {
-                                widget->update();
+                            if (viewport) {
+                                viewport->update();
                             }
                         }
                         pending_card_art.remove(card_icon_key);
@@ -280,7 +284,7 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
         const QColor accent = selected ? palette.highlightedText().color()
                                        : palette.highlight().color();
         DrawGameFolderArtwork(painter, artworkRect, accent, dark);
-    } else {
+    } else if (icon_size > 0) {
         const QPixmap artwork = has_icon
                                     ? (icon_pixmap.isNull()
                                            ? index.data(Qt::DecorationRole).value<QPixmap>()

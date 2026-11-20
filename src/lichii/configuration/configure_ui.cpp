@@ -282,6 +282,9 @@ void ConfigureUi::changeEvent(QEvent* event) {
 void ConfigureUi::RetranslateUI() {
     ui->retranslateUi(this);
 
+    ui->game_library_style_combobox->setItemText(0, tr("Modern Style (Recommended)"));
+    ui->game_library_style_combobox->setItemText(1, tr("Legacy Style"));
+
     for (int i = 0; i < ui->folder_icon_size_combobox->count(); i++) {
         ui->folder_icon_size_combobox->setItemText(
             i, GetTranslatedFolderIconSize(static_cast<size_t>(i)));

@@ -340,6 +340,7 @@ void ConfigureDialog::OnLanguageChanged(const QString& locale) {
     //  Reloading the game list is needed to force retranslation.
     UISettings::values.is_game_list_reload_pending = true;
     // first apply the configuration, and then restore the display
+    UISettings::values.configuration_applied = true;
     ApplyConfiguration();
     RetranslateUI();
     SetConfiguration();

@@ -257,6 +257,10 @@ FirmwareManager::InstallKeys(std::string location, std::string extension) {
     if (!MergeInstalledProdKeys(keys_dir, staged, prod_key_filename, merge_installed_keys)) {
         return ErrorFailedCopy;
     }
+    manager = Core::Crypto::KeyManager::CreateForDirectory(staged);
+    if (!manager || manager->BaseDeriveNecessary()) {
+        return ErrorFailedInit;
+    }
 
     std::error_code create_error;
     std::filesystem::create_directories(keys_dir, create_error);

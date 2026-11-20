@@ -185,6 +185,7 @@ LoadingScreen::LoadingScreen(QWidget* parent)
       previous_stage(VideoCore::LoadCallbackStage::Complete) {
     ui->setupUi(this);
     setMinimumSize(Layout::MinimumSize::Width, Layout::MinimumSize::Height);
+    ui->stage->setTextFormat(Qt::PlainText);
     ui->logo->setMinimumSize(100, 100);
     ui->logo->setMaximumSize(360, GameIconSize + LogoFloatRange);
     auto value_size_policy = ui->value->sizePolicy();
@@ -342,6 +343,7 @@ void LoadingScreen::ApplyArtwork(const Snapshot& snapshot) {
             logo_accent = LiftLogoAccent(SampleLogoColor(fallback.toImage(), 0, 100));
         } else {
             const QString wordmark = game_title.isEmpty() ? tr("Lichii") : game_title;
+            ui->logo->setTextFormat(Qt::PlainText);
             ui->logo->setText(wordmark);
             ui->logo->setWordWrap(true);
             ui->logo->setStyleSheet(

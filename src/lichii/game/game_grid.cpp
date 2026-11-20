@@ -34,7 +34,7 @@ GameGrid::GameGrid(QWidget* parent) : QListView{parent} {
     setEditTriggers(QAbstractItemView::NoEditTriggers);
     setContextMenuPolicy(Qt::CustomContextMenu);
 
-    setSpacing(10);
+    setSpacing(0);
     setWordWrap(true);
     setTextElideMode(Qt::ElideRight);
     setFlow(QListView::LeftToRight);
@@ -91,8 +91,7 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
                 const QVariant owner_dir = item->data(GameListItemPath::OwnerDirRole);
                 if (owner_dir.isValid()) {
                     in_browsed_dir = owner_dir.toInt() == browsed_dir;
-                }
-                if (!in_browsed_dir && browsed_dir < UISettings::values.game_dirs.size()) {
+                } else if (browsed_dir < UISettings::values.game_dirs.size()) {
                     QString dir_path = QString::fromStdString(
                         UISettings::values.game_dirs[browsed_dir].path);
                     dir_path.replace(QLatin1Char('\\'), QLatin1Char('/'));

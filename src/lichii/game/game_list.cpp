@@ -274,6 +274,9 @@ void GameList::ResetViewMode() {
     case Settings::GameListMode::GridView:
         m_currentView = grid_view;
         newTreeMode = false;
+        if (search_field) {
+            grid_view->ApplyFilter(search_field->filterText().toLower(), item_model);
+        }
 
         break;
     case Settings::GameListMode::CarouselView:

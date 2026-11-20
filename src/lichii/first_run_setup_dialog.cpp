@@ -723,17 +723,17 @@ bool FirstRunSetupDialog::validateCurrentPage() {
         return false;
     }
 
+    if (firmware_imported && selected_firmware == installed_firmware_path &&
+        firmware_source_is_zip == installed_firmware_source_is_zip &&
+        selected_keys == installed_firmware_keys_path) {
+        return true;
+    }
+
     const QFileInfo source(selected_firmware);
     if (!source.exists() || (firmware_source_is_zip ? !source.isFile() : !source.isDir())) {
         QMessageBox::warning(this, tr("Firmware source not found"),
                              tr("Choose an existing ZIP archive or firmware folder."));
         return false;
-    }
-
-    if (firmware_imported && selected_firmware == installed_firmware_path &&
-        firmware_source_is_zip == installed_firmware_source_is_zip &&
-        selected_keys == installed_firmware_keys_path) {
-        return true;
     }
 
     const bool installed = firmware_source_is_zip

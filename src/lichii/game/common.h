@@ -16,7 +16,7 @@ namespace Lichii {
 /// used as-is, otherwise keep a minimum size that stays legible next to the title.
 inline u32 CardIconDisplaySize(bool show_game_name) {
     const u32 icon_size = UISettings::values.game_cover_size.GetValue();
-    return show_game_name ? std::max<u32>(icon_size, u32{128}) : icon_size;
+    return (show_game_name && icon_size > 0) ? std::max<u32>(icon_size, u32{128}) : icon_size;
 }
 
 inline bool ContainsAllWords(const QString& haystack, const QString& userinput) {
