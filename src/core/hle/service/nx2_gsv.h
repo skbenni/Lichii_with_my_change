@@ -2113,6 +2113,12 @@ private:
         } else if (frames_ahead == -1 && app_program_id == OcarinaOfTimeProgramId) {
             frames_ahead = 1;
         }
+        constexpr u64 DuskbloodsNetworkTestProgramId = 0x0400D1D02399A000ULL;
+        const bool duskbloods_auto_ahead =
+            frames_ahead_setting == -1 && app_program_id == DuskbloodsNetworkTestProgramId;
+        if (duskbloods_auto_ahead) {
+            frames_ahead = 1;
+        }
         const auto entered = std::chrono::steady_clock::now();
         static const bool fence_trace = [] {
             const char* value = std::getenv("EDEN_NX2_PRESENT_FENCE_TRACE");
@@ -2139,7 +2145,7 @@ private:
                                         m_previous_fence_id, m_previous_fence_value);
             WaitForFrame(m_previous_fence_id, m_previous_fence_value);
             if (gpu_behind) {
-                WaitForFrame(~w[22], w[24]);
+                WaitForFrame(~w[22], w[24], duskbloods_auto_ahead);
             }
         } else if (frames_ahead == 0) {
             WaitForFrame(~w[22], w[24]);

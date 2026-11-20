@@ -410,7 +410,7 @@ jobs:
             -DLICHII_USE_BUNDLED_QT=OFF \
             -DENABLE_QT_TRANSLATION=ON \
             "-DCMAKE_PREFIX_PATH=$(brew --prefix qt@6);$(brew --prefix zlib)" \
-            "-DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" \
+            "-DOPENSSL_ROOT_DIR=$(brew --prefix openssl)" \
             -DVulkanHeaders_FORCE_BUNDLED=ON \
             -DVulkanUtilityLibraries_FORCE_BUNDLED=ON \
             -DENABLE_UPDATE_CHECKER=ON \
