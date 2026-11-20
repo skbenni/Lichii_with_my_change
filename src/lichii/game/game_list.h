@@ -212,8 +212,10 @@ private:
     bool m_isFlat = false;
     bool m_populating = false;
     int grid_root_dir_index_to_restore = -1;
-    /// Set while a mouse double-click is being processed; its trailing activated signal is skipped.
+    /// Set while a left mouse double-click is being processed; its trailing activated signal is
+    /// skipped.
     bool grid_mouse_activated = false;
+    bool grid_mouse_left_double_click = false;
     bool nup_conversion_running{};
     bool nx_tool_running{};
     u64 reportable_program_id{};

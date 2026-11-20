@@ -221,11 +221,16 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
 
     const u32 icon_size = UISettings::values.game_cover_size.GetValue();
     const QString card_icon_key = index.data(GameListItemPath::CardIconRole).toString();
-    const QPixmap icon_pixmap = game_folder || add_folder || card_icon_key.isEmpty()
-                                    ? QPixmap{}
-                                    : GameListItemPath::CardArtCache::Lookup(card_icon_key);
     const bool has_icon = !game_folder && !add_folder &&
                           index.data(GameListItemPath::HasIconRole).toBool();
+    QPixmap icon_pixmap;
+    if (has_icon && !card_icon_key.isEmpty()) {
+        icon_pixmap = GameListItemPath::CardArtCache::Lookup(card_icon_key);
+        if (icon_pixmap.isNull()) {
+            icon_pixmap = GameListItemPath::ReloadCardArt(
+                card_icon_key, index.data(GameListItemPath::CardArtDataRole).toByteArray());
+        }
+    }
     const bool folder_cards = option.widget &&
                               option.widget->objectName() == QStringLiteral("gameGridView");
     const bool show_game_name = UISettings::values.show_game_name.GetValue() ||

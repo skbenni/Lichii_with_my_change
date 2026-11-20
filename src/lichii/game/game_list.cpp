@@ -20,6 +20,7 @@
 #include <QList>
 #include <QListView>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPersistentModelIndex>
 #include <QScrollBar>
 #include <QScroller>
@@ -92,13 +93,16 @@ GameList::GameList(FileSys::VirtualFilesystem vfs_, FileSys::ManualContentProvid
 
     connect(grid_view, &QListView::doubleClicked, this, [this](const QModelIndex& index) {
         const QPersistentModelIndex persistent_index{index};
-        grid_mouse_activated = true;
-        QTimer::singleShot(0, this, [this, persistent_index] {
-            grid_mouse_activated = false;
-            if (persistent_index.isValid()) {
-                ValidateEntry(persistent_index);
-            }
-        });
+        if (grid_mouse_left_double_click) {
+            grid_mouse_activated = true;
+            QTimer::singleShot(0, this, [this, persistent_index] {
+                grid_mouse_activated = false;
+                if (persistent_index.isValid()) {
+                    ValidateEntry(persistent_index);
+                }
+            });
+        }
+        grid_mouse_left_double_click = false;
     });
     // Mouse double-clicks also emit activated right after doubleClicked, and both would boot the
     // game; a second boot while the first is still starting shuts it down again. Ignore activations
@@ -1133,7 +1137,36 @@ void GameList::AddPermDirPopup(QMenu& context_menu, QModelIndex selected) {
             }
 
             SetScanEnabled(false);
+            QVector<QString> old_paths;
+            old_paths.reserve(game_dirs.size());
+            for (const auto& game_dir : game_dirs) {
+                old_paths.append(QString::fromStdString(game_dir.path));
+            }
             std::swap(game_dirs[current_index], game_dirs[neighbor_index]);
+            QHash<QString, int> new_indices;
+            for (int index = 0; index < game_dirs.size(); ++index) {
+                new_indices.insert(old_paths[index], index);
+            }
+            for (int row = 0; row < item_model->rowCount(); ++row) {
+                QStandardItem* item = item_model->item(row, 0);
+                if (item == nullptr) {
+                    continue;
+                }
+                const auto type = item->data(GameListItem::TypeRole).value<GameListItemType>();
+                if (is_directory(item_model->index(row, 0))) {
+                    const int old_index = item->data(GameListDir::GameDirRole).toInt();
+                    if (old_index >= 0 && old_index < old_paths.size()) {
+                        item->setData(new_indices.value(old_paths[old_index], old_index),
+                                      GameListDir::GameDirRole);
+                    }
+                } else if (type == GameListItemType::Game) {
+                    const int old_index = item->data(GameListItemPath::OwnerDirRole).toInt();
+                    if (old_index >= 0 && old_index < old_paths.size()) {
+                        item->setData(new_indices.value(old_paths[old_index], old_index),
+                                      GameListItemPath::OwnerDirRole);
+                    }
+                }
+            }
             if (m_currentView == grid_view) {
                 grid_view->SetBrowsedDirectory(-1);
             }
@@ -1193,6 +1226,11 @@ void GameList::SetupScrollAnimation() {
 }
 
 bool GameList::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == grid_view->viewport() && event->type() == QEvent::MouseButtonDblClick) {
+        grid_mouse_left_double_click =
+            static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton;
+    }
+
     if (obj == m_currentView->viewport() && event->type() == QEvent::Wheel) {
         QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
 

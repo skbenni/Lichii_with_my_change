@@ -587,9 +587,7 @@ FirstRunSetupDialog::FirstRunSetupDialog(QWidget* parent) : QWizard(parent) {
         const QString path = QFileDialog::getOpenFileName(
             this, tr("Select firmware ZIP"), {}, tr("ZIP archives (*.zip)"));
         if (!path.isEmpty()) {
-            if (!firmware_source_is_zip) {
-                firmware_imported = false;
-            }
+            firmware_imported = false;
             firmware_path->setText(path);
             firmware_source_is_zip = true;
         }
@@ -597,9 +595,7 @@ FirstRunSetupDialog::FirstRunSetupDialog(QWidget* parent) : QWizard(parent) {
     connect(firmware_folder_button, &QPushButton::clicked, this, [this] {
         const QString path = QFileDialog::getExistingDirectory(this, tr("Select firmware folder"));
         if (!path.isEmpty()) {
-            if (firmware_source_is_zip) {
-                firmware_imported = false;
-            }
+            firmware_imported = false;
             firmware_path->setText(path);
             firmware_source_is_zip = false;
         }
