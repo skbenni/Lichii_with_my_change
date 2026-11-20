@@ -324,6 +324,7 @@ void GameList::OnTextChanged(const QString& new_text) {
         tree_view->ApplyFilter(edit_filter_text, item_model);
     } else {
         grid_view->ApplyFilter(edit_filter_text, item_model);
+        carousel_view->ApplyFilter(edit_filter_text, item_model);
     }
 }
 
@@ -339,6 +340,7 @@ void GameList::OnPopulatingCompleted(const QStringList& watch_list) {
 
     if (!m_isTreeMode) {
         grid_view->ApplyFilter(search_field->filterText().toLower(), item_model);
+        carousel_view->ApplyFilter(search_field->filterText().toLower(), item_model);
     }
 
     // favorites row

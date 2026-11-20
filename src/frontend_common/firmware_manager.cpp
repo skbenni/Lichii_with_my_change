@@ -36,6 +36,13 @@ std::filesystem::path StageKeyFiles(const std::filesystem::path& keys_dir,
     if (!std::filesystem::create_directories(staged, error) || error) {
         return {};
     }
+    std::error_code cleanup_error;
+    auto cleanup = SCOPE_GUARD { std::filesystem::remove_all(staged, cleanup_error); };
+    std::filesystem::permissions(staged, std::filesystem::perms::owner_all,
+                                 std::filesystem::perm_options::replace, error);
+    if (error) {
+        return {};
+    }
 
     const auto replaced = [&source_key_files](const std::filesystem::path& path) {
         return std::any_of(source_key_files.begin(), source_key_files.end(),
@@ -57,6 +64,13 @@ std::filesystem::path StageKeyFiles(const std::filesystem::path& keys_dir,
             if (replaced(existing)) {
                 continue;
             }
+            std::error_code directory_error;
+            if (std::filesystem::is_directory(existing, directory_error)) {
+                continue;
+            }
+            if (directory_error) {
+                return {};
+            }
             std::error_code copy_error;
             if (!std::filesystem::copy_file(existing, staged / existing.filename(),
                                             std::filesystem::copy_options::overwrite_existing,
@@ -77,6 +91,7 @@ std::filesystem::path StageKeyFiles(const std::filesystem::path& keys_dir,
             return {};
         }
     }
+    cleanup.Cancel();
     return staged;
 }
 

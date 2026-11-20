@@ -52,10 +52,25 @@ void GameCarousel::ApplyFilter(const QString& edit_filter_text, GameListModel* m
         if (!item)
             continue;
 
-        if (Lichii::FilterMatches(edit_filter_text, item)) {
-            setRowHidden(i, false);
+        const auto type = item->data(GameListItem::TypeRole).value<GameListItemType>();
+        setRowHidden(i, type != GameListItemType::Game ||
+                            !Lichii::FilterMatches(edit_filter_text, item));
+    }
+
+    const QModelIndex current = currentIndex();
+    if (current.isValid() && isRowHidden(current.row())) {
+        QModelIndex first_visible;
+        for (int i = 0; i < row_count; ++i) {
+            if (!isRowHidden(i)) {
+                first_visible = model->index(i, 0);
+                break;
+            }
+        }
+        if (first_visible.isValid()) {
+            setCurrentIndex(first_visible);
         } else {
-            setRowHidden(i, true);
+            setCurrentIndex(QModelIndex());
+            clearSelection();
         }
     }
 }

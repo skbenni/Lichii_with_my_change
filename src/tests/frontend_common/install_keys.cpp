@@ -89,6 +89,8 @@ TEST_CASE("Installing keys from another folder copies them into the keys folder"
     WriteFile(source / "prod.keys", valid_keys.c_str());
     WriteFile(source / "title.keys", "0100000000000000 = 11\n");
     WriteFile(directory.keys / "prod.keys", "header_key = 00\n");
+    REQUIRE(std::filesystem::create_directory(directory.keys / "backups"));
+    WriteFile(directory.keys / "backups" / "old.keys", "header_key = 00\n");
 
     FirmwareManager::KeyInstallResult result{};
     REQUIRE_NOTHROW(result = FirmwareManager::InstallKeys((source / "prod.keys").string(), "keys"));
