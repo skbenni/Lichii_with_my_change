@@ -100,6 +100,7 @@ struct BuiltinPatch {
     // Off until checked in Add-Ons (stored as EnabledAddonKey(name)), for game options rather
     // than fixes.
     bool off_by_default = false;
+    bool skip_on_cheat_overlap = false;
     // Built-ins that patch the same place: the first one applied (in this list's order) wins.
     std::string_view group{};
     std::string_view description{};
@@ -675,6 +676,55 @@ constexpr std::array WEB_CARRY_RECORDS{
 };
 constexpr std::array WEB_CARRY_STATE{BuiltinPatchState{0x4E9D100, 136}};
 
+// Keep the manager's original bit test and both targets. After the first eligible request,
+// require one guest second between requests. The hook preserves x8-x11, SP and NZCV.
+// The KaeGae registry lists these zero-filled alignment slots inside the exact build's text,
+// where the native-execution scanner can also translate the two timer reads.
+constexpr std::string_view TEXTURE_COMPACTION_NAME = "Texture heap compaction interval (built-in)";
+constexpr std::array<u8, 4> TEXTURE_COMPACTION_ORIGINAL{0x88, 0x00, 0x08, 0x36};
+constexpr std::array<u8, 4> TEXTURE_COMPACTION_HOOK{0xD3, 0x1E, 0x40, 0x14};
+constexpr std::array<u8, 28> TEXTURE_COMPACTION_PADDING{};
+constexpr std::array<u8, 28> TEXTURE_COMPACTION_ENTRY{
+    0x88, 0xDD, 0x0F, 0x36, 0xE8, 0x27, 0xBE, 0xA9, 0xEA, 0x2F, 0x01, 0xA9,
+    0x0B, 0x42, 0x3B, 0xD5, 0x08, 0xE0, 0x3B, 0xD5, 0x88, 0xDF, 0xFF, 0xB4,
+    0x93, 0xFE, 0xFF, 0x17,
+};
+constexpr std::array<u8, 24> TEXTURE_COMPACTION_SAMPLE{
+    0x29, 0xE0, 0x3B, 0xD5, 0xEA, 0xB8, 0x01, 0xF0, 0x4A, 0x01, 0x08, 0x91,
+    0x4A, 0x05, 0x40, 0xF9, 0x8A, 0x06, 0x00, 0xB4, 0x1B, 0x00, 0x00, 0x14,
+};
+constexpr std::array<u8, 24> TEXTURE_COMPACTION_ELAPSED{
+    0xEA, 0xB8, 0x01, 0xF0, 0x4A, 0x01, 0x41, 0xF9, 0x2A, 0x01, 0x0A, 0xCB,
+    0x5F, 0x01, 0x08, 0xEB, 0x83, 0x05, 0x00, 0x54, 0x13, 0x00, 0x00, 0x14,
+};
+constexpr std::array<u8, 20> TEXTURE_COMPACTION_RECORD{
+    0xEA, 0xB8, 0x01, 0xF0, 0x4A, 0x01, 0x08, 0x91, 0x28, 0x00, 0x80, 0xD2,
+    0x49, 0x21, 0x00, 0xA9, 0x2C, 0x00, 0x00, 0x14,
+};
+constexpr std::array<u8, 16> TEXTURE_COMPACTION_SKIP{
+    0x0B, 0x42, 0x1B, 0xD5, 0xEA, 0x2F, 0x41, 0xA9, 0xE8, 0x27, 0xC2, 0xA8,
+    0x45, 0xE2, 0xBF, 0x17,
+};
+constexpr std::array<u8, 16> TEXTURE_COMPACTION_ALLOW{
+    0x0B, 0x42, 0x1B, 0xD5, 0xEA, 0x2F, 0x41, 0xA9, 0xE8, 0x27, 0xC2, 0xA8,
+    0x2A, 0xE2, 0xBF, 0x17,
+};
+constexpr std::array TEXTURE_COMPACTION_RECORDS{
+    BuiltinPatchRecord{0x777278, TEXTURE_COMPACTION_HOOK, TEXTURE_COMPACTION_ORIGINAL},
+    BuiltinPatchRecord{0x177EDC4, TEXTURE_COMPACTION_ENTRY, TEXTURE_COMPACTION_PADDING},
+    BuiltinPatchRecord{0x177E828, TEXTURE_COMPACTION_SAMPLE,
+                       std::span{TEXTURE_COMPACTION_PADDING}.first<TEXTURE_COMPACTION_SAMPLE.size()>()},
+    BuiltinPatchRecord{0x177E8A8, TEXTURE_COMPACTION_ELAPSED,
+                       std::span{TEXTURE_COMPACTION_PADDING}.first<TEXTURE_COMPACTION_ELAPSED.size()>()},
+    BuiltinPatchRecord{0x177E908, TEXTURE_COMPACTION_RECORD,
+                       std::span{TEXTURE_COMPACTION_PADDING}.first<TEXTURE_COMPACTION_RECORD.size()>()},
+    BuiltinPatchRecord{0x177E968, TEXTURE_COMPACTION_SKIP,
+                       std::span{TEXTURE_COMPACTION_PADDING}.first<TEXTURE_COMPACTION_SKIP.size()>()},
+    BuiltinPatchRecord{0x177E9C8, TEXTURE_COMPACTION_ALLOW,
+                       std::span{TEXTURE_COMPACTION_PADDING}.first<TEXTURE_COMPACTION_ALLOW.size()>()},
+};
+constexpr std::array TEXTURE_COMPACTION_STATE{BuiltinPatchState{0x4E9D200, 16}};
+
 constexpr std::array BUILTIN_PATCHES{
     // Ocarina of Time takes its "dynamic resolution disabled" path, so the 3D renders at full scale
     // instead of following the GPU-time controller down to its 480p floor.
@@ -793,6 +843,18 @@ constexpr std::array BUILTIN_PATCHES{
         .records = WEB_CARRY_RECORDS,
         .states = WEB_CARRY_STATE,
         .requires_patch = FPS_UNLOCK_NAME,
+    },
+    BuiltinPatch{
+        .name = TEXTURE_COMPACTION_NAME,
+        .title_id = 0x0400486024DEC000,
+        .module = "main",
+        .build_id = "E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348",
+        .records = TEXTURE_COMPACTION_RECORDS,
+        .states = TEXTURE_COMPACTION_STATE,
+        .off_by_default = true,
+        .skip_on_cheat_overlap = true,
+        .description = "Limits requests for new texture heap compaction rounds to once per guest "
+                       "second. This may increase heap fragmentation. Restart the game to apply.",
     },
     BuiltinPatch{
         .name = "Full Scene Resolution with FXAA (built-in)",
@@ -1476,7 +1538,7 @@ std::vector<u8> PatchManager::PatchNSO(const std::vector<u8>& nso, const std::st
         if (!apply) {
             continue;
         }
-        if (!patch.requires_patch.empty()) {
+        if (!patch.requires_patch.empty() || patch.skip_on_cheat_overlap) {
             const auto overlaps =
                 FindBuiltinCheatOverlaps(title_id, std::span{&patch.name, 1}, load_cheats());
             if (!overlaps.empty()) {

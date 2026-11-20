@@ -112,6 +112,7 @@ add_executable(tests
     video_core/ampere_logged_textures.cpp
     video_core/native_texture_header_index.cpp
     video_core/texture_alias_ticks.cpp
+    video_core/texture_cache_gob_layout.cpp
     video_core/sampled_views.cpp
     video_core/texture_handles.cpp
     video_core/ampere_selevet_modes.cpp
@@ -162,6 +163,7 @@ add_executable(tests
     video_core/pending_maps.cpp
     video_core/maxwell_fast_method.cpp
     hid_core/emulated_controller_config.cpp
+    hid_core/npad_assignment.cpp
     hid_core/sensor_info.cpp
     common/flat_allocator.cpp
     common/paged_scalar.cpp
