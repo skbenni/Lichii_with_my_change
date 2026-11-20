@@ -1145,7 +1145,7 @@ void GameList::AddPermDirPopup(QMenu& context_menu, QModelIndex selected) {
             std::swap(game_dirs[current_index], game_dirs[neighbor_index]);
             QHash<QString, int> new_indices;
             for (int index = 0; index < game_dirs.size(); ++index) {
-                new_indices.insert(old_paths[index], index);
+                new_indices.insert(QString::fromStdString(game_dirs[index].path), index);
             }
             for (int row = 0; row < item_model->rowCount(); ++row) {
                 QStandardItem* item = item_model->item(row, 0);
