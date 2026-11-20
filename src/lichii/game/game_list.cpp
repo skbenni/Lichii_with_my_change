@@ -20,9 +20,11 @@
 #include <QList>
 #include <QListView>
 #include <QMenu>
+#include <QPersistentModelIndex>
 #include <QScrollBar>
 #include <QScroller>
 #include <QScrollerProperties>
+#include <QTimer>
 #include <QToolButton>
 #include <QFutureWatcher>
 #include <QVariantAnimation>
@@ -89,8 +91,14 @@ GameList::GameList(FileSys::VirtualFilesystem vfs_, FileSys::ManualContentProvid
     connect(tree_view, &QTreeView::customContextMenuRequested, this, &GameList::PopupContextMenu);
 
     connect(grid_view, &QListView::doubleClicked, this, [this](const QModelIndex& index) {
+        const QPersistentModelIndex persistent_index{index};
         grid_mouse_activated = true;
-        ValidateEntry(index);
+        QTimer::singleShot(0, this, [this, persistent_index] {
+            grid_mouse_activated = false;
+            if (persistent_index.isValid()) {
+                ValidateEntry(persistent_index);
+            }
+        });
     });
     // Mouse double-clicks also emit activated right after doubleClicked, and both would boot the
     // game; a second boot while the first is still starting shuts it down again. Ignore activations
@@ -324,6 +332,10 @@ void GameList::OnPopulatingCompleted(const QStringList& watch_list) {
     emit ShowList(UISettings::values.game_list_mode.GetValue() ==
                       Settings::GameListMode::GridView ||
                   !item_model->IsEmpty());
+
+    if (!m_isTreeMode) {
+        grid_view->ApplyFilter(search_field->filterText().toLower(), item_model);
+    }
 
     // favorites row
     if (m_isTreeMode) {
@@ -719,6 +731,9 @@ void GameList::ValidateEntry(const QModelIndex& item) {
         break;
     }
     case GameListItemType::CustomDir:
+    case GameListItemType::SdmcDir:
+    case GameListItemType::UserNandDir:
+    case GameListItemType::SysNandDir:
         // Folder cards are grid navigation; the tree expands its rows natively.
         if (m_currentView == grid_view) {
             grid_view->BrowseDirectory(selected.data(GameListDir::GameDirRole).toInt());

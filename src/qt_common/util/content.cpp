@@ -150,14 +150,21 @@ bool InstallFirmware(const QString& location, bool recursive) {
     // Re-scan VFS for the newly placed firmware files.
     system->GetFileSystemController().CreateFactories(*vfs);
 
+    bool verification_cancelled = false;
     auto VerifyFirmwareCallback = [&](size_t total_size, size_t processed_size) {
         QGuiApplication::processEvents();
         progress->setValue(90 + static_cast<int>((processed_size * 10) / total_size));
-        return progress->wasCanceled();
+        verification_cancelled = progress->wasCanceled();
+        return verification_cancelled;
     };
 
     auto results = ContentManager::VerifyInstalledContents(*QtCommon::system, *QtCommon::provider,
                                                            VerifyFirmwareCallback, true);
+
+    if (verification_cancelled) {
+        progress->close();
+        return false;
+    }
 
     if (results.size() > 0) {
         const auto failed_names =

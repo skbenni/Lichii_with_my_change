@@ -36,14 +36,16 @@ inline bool FilterMatches(const QString& filter, const QStandardItem* item) {
     };
 
     const auto norm_filter = sluggify(filter);
+    const QString display_name = sluggify(item->data(Qt::DisplayRole).toString());
     const auto program_id = item->data(GameListItemPath::ProgramIdRole).toULongLong();
     const QString file_path = sluggify(item->data(GameListItemPath::FullPathRole).toString());
     const QString file_title = sluggify(item->data(GameListItemPath::TitleRole).toString());
     const QString file_program_id = QStringLiteral("%1").arg(program_id, 16, 16, QLatin1Char{'0'});
     const QString file_name = sluggify(file_path.mid(file_path.lastIndexOf(QLatin1Char{'/'}) + 1) + QLatin1Char{' '} + file_title);
-    return (ContainsAllWords(file_name, norm_filter)
-        || ContainsAllWords(file_title, norm_filter))
-        || (file_program_id.size() == 16 && file_program_id.contains(norm_filter));
+    return ContainsAllWords(display_name, norm_filter) ||
+           ContainsAllWords(file_name, norm_filter) ||
+           ContainsAllWords(file_title, norm_filter) ||
+           (file_program_id.size() == 16 && file_program_id.contains(norm_filter));
 }
 
 } // namespace Lichii

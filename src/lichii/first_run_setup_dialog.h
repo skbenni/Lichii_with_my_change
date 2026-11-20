@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QString>
 #include <QWizard>
 
 #include "qt_common/config/uisettings.h"
@@ -23,7 +24,6 @@ public:
 
     [[nodiscard]] UISettings::Theme selected_theme() const;
     [[nodiscard]] UISettings::GameLibraryStyle selected_library_style() const;
-    [[nodiscard]] bool installed_keys() const;
 
 private:
     void BuildThemeList();
@@ -38,6 +38,10 @@ private:
     QRadioButton* classic_style{};
     QWidget* preview{};
     bool firmware_source_is_zip{};
-    bool keys_installed{};
+    bool firmware_imported{};
+    bool installed_firmware_source_is_zip{};
+    QString installed_keys_path;
+    QString installed_firmware_path;
+    QString installed_firmware_keys_path;
     UISettings::GameLibraryStyle selected_style{UISettings::GameLibraryStyle::Modern};
 };

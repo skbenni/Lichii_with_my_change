@@ -289,6 +289,7 @@ void LoadingScreen::ResetDisplay() {
     ui->stage->clear();
     ui->value->clear();
     ui->logo->setVisible(false);
+    skip_button->hide();
     SetLogoBackground(this, QPixmap{});
     Clear();
     previous_total = 0;

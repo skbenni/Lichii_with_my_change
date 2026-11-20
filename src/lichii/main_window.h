@@ -479,7 +479,7 @@ private slots:
 
     /// Shows the first-run setup for theme and library style, then records the choices (the
     /// library style fallback when the dialog is dismissed).
-    bool PromptFirstRunSetup();
+    void PromptFirstRunSetup();
 
 #ifdef ENABLE_UPDATE_CHECKER
     // A manual check reports every outcome and ignores the skipped release and remind-later time.

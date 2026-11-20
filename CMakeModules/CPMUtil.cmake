@@ -1085,22 +1085,44 @@ function(AddCIPackage)
         set(cached_sha512_file "${artifact_cache_path}/.cpm_archive_sha512")
 
         # A cached package was already verified against its sha512sum; reuse that hash.
+        set(sha512sum_hash "")
         if(EXISTS "${cached_sha512_file}")
             file(READ "${cached_sha512_file}" sha512sum_hash)
             string(STRIP "${sha512sum_hash}" sha512sum_hash)
-        else()
+            string(LENGTH "${sha512sum_hash}" sha512sum_hash_length)
+            if(NOT sha512sum_hash_length EQUAL 128 OR
+               NOT "${sha512sum_hash}" MATCHES "^[0-9A-Fa-f]+$")
+                file(REMOVE "${cached_sha512_file}")
+                set(sha512sum_hash "")
+            endif()
+        endif()
+
+        if(NOT sha512sum_hash)
             set(sha512sum_url
                 "https://${ARTIFACT_GIT_HOST}/${ARTIFACT_REPO}/releases/download/${ARTIFACT_VERSION}/${ARTIFACT}.sha512sum")
             # Keep the checksum beside the package cache so it survives reconfigures.
             get_cache_path(${ARTIFACT_PACKAGE} "${ARTIFACT_KEY}" ci_cache_path)
             set(sha512sum_file "${ci_cache_path}.sha512sum")
 
-            set(sha512sum_error 1)
-            set(sha512sum_error_message "checksum not cached")
-            if(NOT EXISTS "${sha512sum_file}")
+            if(EXISTS "${sha512sum_file}")
+                file(READ "${sha512sum_file}" sha512sum_hash)
+                string(STRIP "${sha512sum_hash}" sha512sum_hash)
+                string(LENGTH "${sha512sum_hash}" sha512sum_hash_length)
+                if(NOT sha512sum_hash_length EQUAL 128 OR
+                   NOT "${sha512sum_hash}" MATCHES "^[0-9A-Fa-f]+$")
+                    file(REMOVE "${sha512sum_file}")
+                    set(sha512sum_hash "")
+                endif()
+            endif()
+
+            if(NOT sha512sum_hash)
                 cpmutil_netrc_args(sha512sum_netrc_args)
+                set(sha512sum_tmp "${sha512sum_file}.tmp")
+                file(REMOVE "${sha512sum_tmp}")
+                set(sha512sum_error 1)
+                set(sha512sum_error_message "checksum not cached")
                 foreach(attempt RANGE 1 8)
-                    file(DOWNLOAD "${sha512sum_url}" "${sha512sum_file}"
+                    file(DOWNLOAD "${sha512sum_url}" "${sha512sum_tmp}"
                         ${sha512sum_netrc_args}
                         STATUS sha512sum_status
                         TIMEOUT 60
@@ -1108,10 +1130,20 @@ function(AddCIPackage)
                     list(GET sha512sum_status 0 sha512sum_error)
                     list(GET sha512sum_status 1 sha512sum_error_message)
                     if(NOT sha512sum_error)
-                        break()
+                        file(READ "${sha512sum_tmp}" sha512sum_hash)
+                        string(STRIP "${sha512sum_hash}" sha512sum_hash)
+                        string(LENGTH "${sha512sum_hash}" sha512sum_hash_length)
+                        if(sha512sum_hash_length EQUAL 128 AND
+                           "${sha512sum_hash}" MATCHES "^[0-9A-Fa-f]+$")
+                            file(RENAME "${sha512sum_tmp}" "${sha512sum_file}")
+                            break()
+                        endif()
+                        set(sha512sum_hash "")
+                        set(sha512sum_error 1)
+                        set(sha512sum_error_message "downloaded checksum is not a valid SHA512")
                     endif()
 
-                    file(REMOVE "${sha512sum_file}")
+                    file(REMOVE "${sha512sum_tmp}")
                     if(attempt LESS 8)
                         math(EXPR retry_delay "${attempt} * 5")
                         if(retry_delay GREATER 30)
@@ -1124,18 +1156,10 @@ function(AddCIPackage)
                 endforeach()
 
                 if(sha512sum_error)
+                    file(REMOVE "${sha512sum_tmp}")
                     message(FATAL_ERROR "[CPMUtil] Failed to download sha512sum "
                         "for ${ARTIFACT_NAME} from ${sha512sum_url}: ${sha512sum_error_message}")
                 endif()
-            endif()
-
-            file(READ "${sha512sum_file}" sha512sum_hash)
-            string(STRIP "${sha512sum_hash}" sha512sum_hash)
-            if(NOT sha512sum_hash)
-                file(REMOVE "${sha512sum_file}")
-                message(FATAL_ERROR "[CPMUtil] Cached checksum for ${ARTIFACT_NAME} is empty. "
-                    "The stale checksum was removed; re-run CMake configuration "
-                    "to download it again.")
             endif()
 
             # Caches extracted before hashes were recorded get the hash now

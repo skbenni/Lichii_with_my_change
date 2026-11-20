@@ -80,13 +80,8 @@ void GameListModel::WorkerEvent() {
 }
 
 void GameListModel::AddDirEntry(GameListDir* entry_items) {
-    // The grid lists user folders as cards, empty ones included; the built-in SD and NAND
-    // locations stay structural and only appear in the tree.
-    if (m_flat &&
-        static_cast<GameListItemType>(entry_items->type()) != GameListItemType::CustomDir) {
-        delete entry_items;
-        return;
-    }
+    // Flat views keep directory objects alive while worker events add their games, and expose
+    // installed SD/NAND locations as navigable cards too.
     invisibleRootItem()->appendRow(entry_items);
 }
 
@@ -110,6 +105,19 @@ void GameListModel::AddEntry(const QList<QStandardItem*>& entry_items, GameListD
 
 void GameListModel::DonePopulating(const QStringList& watch_list) {
     if (m_flat) {
+        for (int row = rowCount() - 1; row >= 0; --row) {
+            const QStandardItem* item = invisibleRootItem()->child(row);
+            if (item == nullptr) {
+                continue;
+            }
+            const auto type = static_cast<GameListItemType>(item->type());
+            const bool installed_directory = type == GameListItemType::SdmcDir ||
+                                             type == GameListItemType::UserNandDir ||
+                                             type == GameListItemType::SysNandDir;
+            if (installed_directory && item->data(GameListDir::GameCountRole).toInt() == 0) {
+                invisibleRootItem()->removeRow(row);
+            }
+        }
         // The grid keeps its empty-library card: it is the add-a-folder entry point, so hiding
         // the whole list would leave a blank window.
         invisibleRootItem()->appendRow(new GameListAddDir());
@@ -160,11 +168,18 @@ bool GameListModel::IsEmpty() const {
         const QStandardItem* child = invisibleRootItem()->child(i);
         const auto type = static_cast<GameListItemType>(child->type());
 
-        if (!child->hasChildren() &&
-            (type == GameListItemType::SdmcDir || type == GameListItemType::UserNandDir ||
-             type == GameListItemType::SysNandDir)) {
+        const bool installed_directory = type == GameListItemType::SdmcDir ||
+                                         type == GameListItemType::UserNandDir ||
+                                         type == GameListItemType::SysNandDir;
+        if (installed_directory && !child->hasChildren()) {
+            if (m_flat) {
+                if (child->data(GameListDir::GameCountRole).toInt() > 0) {
+                    return false;
+                }
+                continue;
+            }
             invisibleRootItem()->removeRow(child->row());
-            i--;
+            --i;
             continue;
         }
 

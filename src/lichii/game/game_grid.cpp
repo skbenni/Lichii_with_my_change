@@ -85,8 +85,16 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
                 visible = item->data(GameListItemPath::OwnerDirRole).toInt() == browsed_dir &&
                           Lichii::FilterMatches(edit_filter_text, item);
             }
-        } else if (type == GameListItemType::CustomDir || type == GameListItemType::AddDir) {
-            visible = Lichii::FilterMatches(edit_filter_text, item);
+        } else if (type == GameListItemType::CustomDir || type == GameListItemType::AddDir ||
+                   type == GameListItemType::SdmcDir ||
+                   type == GameListItemType::UserNandDir ||
+                   type == GameListItemType::SysNandDir) {
+            const bool installed_directory = type == GameListItemType::SdmcDir ||
+                                             type == GameListItemType::UserNandDir ||
+                                             type == GameListItemType::SysNandDir;
+            visible = (!installed_directory ||
+                       item->data(GameListDir::GameCountRole).toInt() > 0) &&
+                      Lichii::FilterMatches(edit_filter_text, item);
         }
 
         setRowHidden(i, !visible);
@@ -95,6 +103,9 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
 
 void GameGrid::SetBrowsedDirectory(int dir_index) {
     if (browsed_dir == dir_index) {
+        if (auto* model = qobject_cast<GameListModel*>(QListView::model())) {
+            ApplyFilter(last_filter_text, model);
+        }
         return;
     }
     browsed_dir = dir_index;
