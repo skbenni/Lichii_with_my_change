@@ -103,6 +103,23 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
 
         setRowHidden(i, !visible);
     }
+
+    const QModelIndex current = currentIndex();
+    if (current.isValid() && isRowHidden(current.row())) {
+        QModelIndex first_visible;
+        for (int i = 0; i < row_count; ++i) {
+            if (!isRowHidden(i)) {
+                first_visible = model->index(i, 0);
+                break;
+            }
+        }
+        if (first_visible.isValid()) {
+            setCurrentIndex(first_visible);
+        } else {
+            setCurrentIndex(QModelIndex());
+            clearSelection();
+        }
+    }
 }
 
 void GameGrid::SetBrowsedDirectory(int dir_index) {

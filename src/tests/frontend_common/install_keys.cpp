@@ -50,6 +50,19 @@ std::string ReadFile(const std::filesystem::path& path) {
     return {std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
 }
 
+std::string ValidProdKeys() {
+    std::string keys = fmt::format("header_key = {}\n", std::string(64, '1'));
+    for (int generation = 0; generation < 5; ++generation) {
+        const auto index = fmt::format("{:02X}", generation);
+        keys += fmt::format("master_key_{} = {}\n", index, std::string(32, '2'));
+        keys += fmt::format("key_area_key_application_{} = {}\n", index, std::string(32, '3'));
+        keys += fmt::format("key_area_key_ocean_{} = {}\n", index, std::string(32, '4'));
+        keys += fmt::format("key_area_key_system_{} = {}\n", index, std::string(32, '5'));
+        keys += fmt::format("titlekek_{} = {}\n", index, std::string(32, '6'));
+    }
+    return keys;
+}
+
 } // Anonymous namespace
 
 TEST_CASE("Installing the keys already in the keys folder does not copy them onto themselves",
@@ -72,14 +85,35 @@ TEST_CASE("Installing keys from another folder copies them into the keys folder"
     const KeysDirectory directory;
     const auto source = directory.root / "dump";
     REQUIRE(std::filesystem::create_directory(source));
-    WriteFile(source / "prod.keys", "header_key = 11\n");
+    const auto valid_keys = ValidProdKeys();
+    WriteFile(source / "prod.keys", valid_keys.c_str());
     WriteFile(source / "title.keys", "0100000000000000 = 11\n");
     WriteFile(directory.keys / "prod.keys", "header_key = 00\n");
 
     FirmwareManager::KeyInstallResult result{};
     REQUIRE_NOTHROW(result = FirmwareManager::InstallKeys((source / "prod.keys").string(), "keys"));
-    CHECK(result != FirmwareManager::ErrorFailedCopy);
-    CHECK(ReadFile(directory.keys / "prod.keys") == "header_key = 11\n");
+    CHECK(result == FirmwareManager::Success);
+    CHECK(ReadFile(directory.keys / "prod.keys") == valid_keys);
+    CHECK(ReadFile(directory.keys / "title.keys") == "0100000000000000 = 11\n");
+}
+
+TEST_CASE("Installing invalid replacement keys leaves the installed keys intact",
+          "[frontend_common][install_keys]") {
+    const KeysDirectory directory;
+    const auto valid_keys = ValidProdKeys();
+    WriteFile(directory.keys / "prod.keys", valid_keys.c_str());
+    WriteFile(directory.keys / "title.keys", "0100000000000000 = 11\n");
+    Core::Crypto::KeyManager::Instance().ReloadKeys();
+    REQUIRE_FALSE(Core::Crypto::KeyManager::Instance().BaseDeriveNecessary());
+
+    const auto source = directory.root / "dump";
+    REQUIRE(std::filesystem::create_directory(source));
+    WriteFile(source / "prod.keys", "");
+
+    FirmwareManager::KeyInstallResult result{};
+    REQUIRE_NOTHROW(result = FirmwareManager::InstallKeys((source / "prod.keys").string(), "keys"));
+    CHECK(result == FirmwareManager::ErrorFailedInit);
+    CHECK(ReadFile(directory.keys / "prod.keys") == valid_keys);
     CHECK(ReadFile(directory.keys / "title.keys") == "0100000000000000 = 11\n");
 }
 

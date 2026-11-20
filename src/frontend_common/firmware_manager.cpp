@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "firmware_manager.h"
+#include <algorithm>
+#include <chrono>
 #include <filesystem>
+#include <random>
 #include <common/fs/fs_paths.h>
+#include <common/scope_exit.h>
 
 #include "common/fs/fs.h"
 #include "common/fs/path_util.h"
@@ -18,6 +22,70 @@
 #include <common/android/id_cache.h>
 #include <common/android/android_common.h>
 #endif
+
+namespace {
+
+std::filesystem::path StageKeyFiles(const std::filesystem::path& keys_dir,
+                                    const std::vector<std::filesystem::path>& source_key_files) {
+    const auto nonce = static_cast<unsigned long long>(
+                           std::chrono::steady_clock::now().time_since_epoch().count()) ^
+                       std::random_device{}();
+    const auto staged = std::filesystem::temp_directory_path() /
+                        ("lichii-key-install-" + std::to_string(nonce));
+    std::error_code error;
+    if (!std::filesystem::create_directories(staged, error) || error) {
+        return {};
+    }
+
+    const auto replaced = [&source_key_files](const std::filesystem::path& path) {
+        return std::any_of(source_key_files.begin(), source_key_files.end(),
+                           [&path](const std::filesystem::path& source) {
+                               return source.filename() == path.filename();
+                           });
+    };
+
+    std::error_code exists_error;
+    const bool keys_dir_exists = std::filesystem::exists(keys_dir, exists_error);
+    if (exists_error) {
+        return {};
+    }
+    if (keys_dir_exists) {
+        std::error_code iteration_error;
+        for (std::filesystem::directory_iterator it{keys_dir, iteration_error}, end;
+             !iteration_error && it != end; it.increment(iteration_error)) {
+            const auto& existing = it->path();
+            if (replaced(existing)) {
+                continue;
+            }
+            std::error_code copy_error;
+            if (!std::filesystem::copy_file(existing, staged / existing.filename(),
+                                            std::filesystem::copy_options::overwrite_existing,
+                                            copy_error)) {
+                return {};
+            }
+        }
+        if (iteration_error) {
+            return {};
+        }
+    }
+
+    for (const auto& source : source_key_files) {
+        std::error_code copy_error;
+        if (!std::filesystem::copy_file(source, staged / source.filename(),
+                                        std::filesystem::copy_options::overwrite_existing,
+                                        copy_error)) {
+            return {};
+        }
+    }
+    return staged;
+}
+
+bool AreStagedKeysValid(const std::filesystem::path& staged) {
+    auto manager = Core::Crypto::KeyManager::CreateForDirectory(staged);
+    return manager && !manager->BaseDeriveNecessary();
+}
+
+}
 
 FirmwareManager::KeyInstallResult
 FirmwareManager::InstallKeys(std::string location, std::string extension) {
@@ -91,22 +159,33 @@ FirmwareManager::InstallKeys(std::string location, std::string extension) {
         return ErrorWrongFilename;
     }
 
-    for (const auto &key_file : source_key_files) {
-        std::filesystem::path destination_key_file = keys_dir / key_file.filename();
-        // Picking the keys already installed (a file inside the keys folder) names the same file
-        // twice: copy_file then fails with "File exists" even with overwrite_existing, and its
-        // throwing overload aborted the emulator. The file is already where it belongs.
+    const auto staged = StageKeyFiles(keys_dir, source_key_files);
+    if (staged.empty()) {
+        return ErrorFailedCopy;
+    }
+    std::error_code cleanup_error;
+    SCOPE_EXIT { std::filesystem::remove_all(staged, cleanup_error); };
+    if (!AreStagedKeysValid(staged)) {
+        return ErrorFailedInit;
+    }
+
+    std::error_code create_error;
+    std::filesystem::create_directories(keys_dir, create_error);
+    if (create_error) {
+        return ErrorFailedCopy;
+    }
+
+    for (const auto& key_file : source_key_files) {
+        const auto staged_key_file = staged / key_file.filename();
+        const auto destination_key_file = keys_dir / key_file.filename();
         std::error_code error;
-        if (std::filesystem::equivalent(key_file, destination_key_file, error)) {
-            continue;
-        }
-        if (!std::filesystem::copy_file(key_file,
+        if (!std::filesystem::copy_file(staged_key_file,
                                         destination_key_file,
                                         std::filesystem::copy_options::overwrite_existing,
                                         error)) {
             LOG_ERROR(Frontend,
                       "Failed to copy file {} to {}: {}",
-                      key_file.string(),
+                      staged_key_file.string(),
                       destination_key_file.string(),
                       error.message());
             return ErrorFailedCopy;
