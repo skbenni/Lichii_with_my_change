@@ -226,6 +226,7 @@ add_executable(tests
     common/fibers.cpp
     common/fs_iterate.cpp
     frontend_common/install_keys.cpp
+    frontend_common/play_time.cpp
     common/game_presets.cpp
     common/host_memory.cpp
     common/host_memory_failure.cpp
@@ -243,7 +244,6 @@ add_executable(tests
     common/scratch_buffer.cpp
     common/slot_vector.cpp
     common/sparse_large_vector.cpp
-    common/undefined_fix.cpp
     common/unique_function.cpp
     common/zstd_compression.cpp
     core/core_timing.cpp

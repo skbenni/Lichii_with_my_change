@@ -302,6 +302,9 @@ public:
     static std::unique_ptr<KeyManager> CreateForDirectory(const std::filesystem::path& keys_dir);
 
     void ReloadKeys();
+    /// Forgets every key, keyblob and ticket, then reads the key files again, leaving the manager
+    /// as a new one would be. ReloadKeys only adds to what is loaded.
+    void ResetKeys();
     bool AreKeysLoaded() const;
 
 private:

@@ -696,14 +696,18 @@ void KeyManager::LoadKeysFrom(const std::filesystem::path& keys_dir) {
 void KeyManager::ClearKeys() {
     s128_keys.clear();
     s256_keys.clear();
-    for (auto& blob : encrypted_keyblobs) {
-        blob.fill(0);
-    }
-    for (auto& blob : keyblobs) {
-        blob.fill(0);
-    }
-    eticket_extended_kek.fill(0);
+    common_tickets.clear();
+    personal_tickets.clear();
+    ticket_databases_loaded = false;
+    encrypted_keyblobs = {};
+    keyblobs = {};
+    eticket_extended_kek = {};
     eticket_rsa_keypair = {};
+}
+
+void KeyManager::ResetKeys() {
+    ClearKeys();
+    ReloadKeys();
 }
 
 static bool ValidCryptoRevisionString(std::string_view base, size_t begin, size_t length) {
