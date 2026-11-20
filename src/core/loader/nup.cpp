@@ -349,4 +349,11 @@ ResultStatus AppLoader_NUP::ReadMainBuildId(Core::System& system,
     return secondary_loader->ReadMainBuildId(system, build_id);
 }
 
+std::optional<std::string> AppLoader_NUP::ReadContainerUpdateVersion() const {
+    if (!has_program || !nup->FindBestUpdatePackage()) {
+        return std::nullopt;
+    }
+    return display_version;
+}
+
 } // namespace Loader

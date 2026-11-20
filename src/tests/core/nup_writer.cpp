@@ -661,6 +661,9 @@ TEST_CASE("NUP marks updates standalone when the dump has no base", "[nup]") {
     REQUIRE(nup.GetPackages()[0].standalone_update);
     REQUIRE(nup.GetPackages()[0].title_id == TitleId);
     REQUIRE(Read(nup.GetRomFSDir(0)->GetFile("file")) == "rom");
+
+    const Loader::AppLoader_NUP loader{real.OpenFile(archive.string(), FileSys::OpenMode::Read)};
+    CHECK(loader.ReadContainerUpdateVersion() == "1.0.0");
 }
 
 TEST_CASE("NUP packs a bare exefs/romfs dump as one base", "[nup]") {
@@ -683,6 +686,9 @@ TEST_CASE("NUP packs a bare exefs/romfs dump as one base", "[nup]") {
     REQUIRE(Read(nup.GetRomFSDir(0)->GetFile("file")) == "rom");
     const auto files = RawFiles(ReadAll(archive));
     REQUIRE(std::ranges::count(files, std::string{"notes.txt"}, &RawFile::name) == 1);
+
+    const Loader::AppLoader_NUP loader{real.OpenFile(archive.string(), FileSys::OpenMode::Read)};
+    CHECK_FALSE(loader.ReadContainerUpdateVersion());
 }
 
 TEST_CASE("NUP low storage resumes and deletes the packed sources", "[nup]") {
@@ -1244,6 +1250,7 @@ TEST_CASE("NUP loader selects base metadata field by field with an empty base Ex
         REQUIRE(entry.GetDeveloperName() == expected_publisher);
     }
     REQUIRE(control.GetVersionString() == "1.2.3");
+    CHECK(loader.ReadContainerUpdateVersion() == "1.2.3");
     REQUIRE(control.raw.save_data_owner_id == TitleId);
     u64 program_id{};
     REQUIRE(loader.ReadProgramId(program_id) == Loader::ResultStatus::Success);

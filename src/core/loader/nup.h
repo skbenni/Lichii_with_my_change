@@ -56,6 +56,8 @@ public:
     ResultStatus ReadNSOModules(Modules& modules) override;
     ResultStatus ReadMainBuildId(Core::System& system, std::array<u8, 0x20>& build_id) override;
 
+    std::optional<std::string> ReadContainerUpdateVersion() const;
+
 private:
     std::unique_ptr<FileSys::NupContainer> nup;
     std::unique_ptr<AppLoader> secondary_loader;

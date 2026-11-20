@@ -26,6 +26,7 @@ add_executable(tests
     video_core/hdr_output.cpp
     video_core/host_vsync.cpp
     core/mii_model.cpp
+    core/address_space.cpp
     core/nx2_streamplay.cpp
     core/nx2_gpu_only_regions.cpp
     core/nx2_video_ready.cpp
