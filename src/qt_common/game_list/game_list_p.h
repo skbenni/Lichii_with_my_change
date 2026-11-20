@@ -205,24 +205,26 @@ public:
                 static_cast<qsizetype>(picture_data.size())};
     }
 
-    static QPixmap ScaleCardArt(const QPixmap& picture) {
-        const u32 card_target =
-            std::max<u32>(UISettings::CurrentGameIconSize().GetValue(), u32{384});
-        if (std::max(picture.width(), picture.height()) > static_cast<int>(card_target)) {
+    static QImage ScaleCardArtImage(const QImage& picture, int card_target) {
+        if (std::max(picture.width(), picture.height()) > card_target) {
             return picture.scaled(card_target, card_target, Qt::KeepAspectRatio,
                                   Qt::SmoothTransformation);
         }
         return picture;
     }
 
-    static QPixmap ReloadCardArt(const QString& key, const QByteArray& data) {
-        QPixmap picture;
-        if (key.isEmpty() || data.isEmpty() || !picture.loadFromData(data)) {
+    static QPixmap ScaleCardArt(const QPixmap& picture) {
+        const int card_target =
+            static_cast<int>(std::max<u32>(UISettings::CurrentGameIconSize().GetValue(), u32{384}));
+        return QPixmap::fromImage(ScaleCardArtImage(picture.toImage(), card_target));
+    }
+
+    static QImage ReloadCardArtImage(const QByteArray& data, int card_target) {
+        QImage picture;
+        if (data.isEmpty() || !picture.loadFromData(data)) {
             return {};
         }
-        const QPixmap card_picture = ScaleCardArt(picture);
-        CardArtCache::Insert(key, card_picture);
-        return card_picture;
+        return ScaleCardArtImage(picture, card_target);
     }
 
     GameListItemPath() = default;

@@ -69,7 +69,8 @@ QWidget#fade_parent {
        <widget class="QFrame" name="loadingCard">
         <property name="minimumSize">
          <size>
-          <width>560</width>
+           <width>544</width>
+
           <height>0</height>
          </size>
         </property>

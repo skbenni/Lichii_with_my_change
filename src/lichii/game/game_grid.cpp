@@ -189,10 +189,9 @@ void GameGrid::UpdateIconSize() {
         break;
     case 0:
         named_height_margin = 120;
-        if (UISettings::values.show_game_name) {
-            widthMargin = 120;
-        }
+        widthMargin = 96;
         break;
+
     case 44:
     case 64:
         named_height_margin = 77;

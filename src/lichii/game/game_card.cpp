@@ -3,12 +3,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QColor>
+#include <QFutureWatcher>
 #include <QFileInfo>
 #include <QFont>
 #include <QHash>
 #include <QImage>
 #include <QImageReader>
+#include <QPointer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRectF>
@@ -226,11 +229,33 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
     QPixmap icon_pixmap;
     if (has_icon && !card_icon_key.isEmpty()) {
         icon_pixmap = GameListItemPath::CardArtCache::Lookup(card_icon_key);
-        if (icon_pixmap.isNull()) {
-            icon_pixmap = GameListItemPath::ReloadCardArt(
-                card_icon_key, index.data(GameListItemPath::CardArtDataRole).toByteArray());
+        if (icon_pixmap.isNull() && !pending_card_art.contains(card_icon_key)) {
+            const QByteArray card_art_data =
+                index.data(GameListItemPath::CardArtDataRole).toByteArray();
+            const int card_target = static_cast<int>(
+                std::max<u32>(UISettings::CurrentGameIconSize().GetValue(), u32{384}));
+            pending_card_art.insert(card_icon_key);
+            auto* watcher = new QFutureWatcher<QImage>(const_cast<GameCard*>(this));
+            QPointer<QWidget> widget = option.widget;
+            connect(watcher, &QFutureWatcher<QImage>::finished, this,
+                    [this, watcher, card_icon_key, widget] {
+                        const QImage decoded = watcher->result();
+                        if (!decoded.isNull()) {
+                            GameListItemPath::CardArtCache::Insert(card_icon_key,
+                                                                   QPixmap::fromImage(decoded));
+                            if (widget) {
+                                widget->update();
+                            }
+                        }
+                        pending_card_art.remove(card_icon_key);
+                        watcher->deleteLater();
+                    });
+            watcher->setFuture(QtConcurrent::run([card_art_data, card_target] {
+                return GameListItemPath::ReloadCardArtImage(card_art_data, card_target);
+            }));
         }
     }
+
     const bool folder_cards = option.widget &&
                               option.widget->objectName() == QStringLiteral("gameGridView");
     const bool show_game_name = UISettings::values.show_game_name.GetValue() ||

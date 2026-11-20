@@ -4,6 +4,8 @@
 #pragma once
 
 #include <QPixmap>
+#include <QSet>
+#include <QString>
 #include <QStyledItemDelegate>
 
 QPixmap GameListFallbackIcon(int size);
@@ -37,4 +39,6 @@ private:
     int m_padding;
     int m_columns;
     int m_folder_label_extra_height{};
+    mutable QSet<QString> pending_card_art;
+
 };
