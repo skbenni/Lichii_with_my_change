@@ -1117,7 +1117,10 @@ function(AddCIPackage)
 
             if(NOT sha512sum_hash)
                 cpmutil_netrc_args(sha512sum_netrc_args)
-                set(sha512sum_tmp "${sha512sum_file}.tmp")
+                # Different build trees share the CPM cache; keep concurrent checksum downloads
+                # from removing or renaming one another's temporary file.
+                string(SHA256 sha512sum_tmp_suffix "${CMAKE_BINARY_DIR}")
+                set(sha512sum_tmp "${sha512sum_file}.${sha512sum_tmp_suffix}.tmp")
                 file(REMOVE "${sha512sum_tmp}")
                 set(sha512sum_error 1)
                 set(sha512sum_error_message "checksum not cached")

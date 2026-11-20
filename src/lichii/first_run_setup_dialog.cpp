@@ -635,7 +635,10 @@ FirstRunSetupDialog::FirstRunSetupDialog(QWidget* parent) : QWizard(parent) {
     keys_path->setReadOnly(true);
     keys_path->setPlaceholderText(tr("No prod.keys file selected"));
     connect(keys_path, &QLineEdit::textChanged, this,
-            [this] { firmware_imported = false; });
+            [this] {
+                keys_selection_changed = true;
+                firmware_imported = false;
+            });
     keys_layout->addWidget(keys_path);
 
     auto* keys_buttons = new QHBoxLayout;
@@ -650,6 +653,7 @@ FirstRunSetupDialog::FirstRunSetupDialog(QWidget* parent) : QWizard(parent) {
         const QString path = QFileDialog::getOpenFileName(
             this, tr("Select prod.keys"), {}, tr("Prod keys (prod.keys);;Key files (*.keys)"));
         if (!path.isEmpty()) {
+            keys_selection_changed = true;
             keys_path->setText(path);
         }
     });
@@ -691,7 +695,9 @@ bool FirstRunSetupDialog::validateCurrentPage() {
     bool keys_available = ContentManager::AreKeysPresent();
     const QString selected_keys = keys_path->text().trimmed();
     if (!selected_keys.isEmpty() &&
-        (selected_keys != installed_keys_path || !keys_available)) {
+        (keys_selection_changed || selected_keys != installed_keys_path || !keys_available)) {
+        installed_keys_path.clear();
+        firmware_imported = false;
         const auto result = QtCommon::Content::InstallKeys(selected_keys);
         if (result != FirmwareManager::KeyInstallResult::Success) {
             QMessageBox::critical(this, tr("Could not install prod.keys"),
@@ -706,6 +712,7 @@ bool FirstRunSetupDialog::validateCurrentPage() {
             return false;
         }
         installed_keys_path = selected_keys;
+        keys_selection_changed = false;
     }
 
     const QString selected_firmware = firmware_path->text().trimmed();

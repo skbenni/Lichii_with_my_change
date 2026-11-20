@@ -38,6 +38,7 @@ private:
     QRadioButton* classic_style{};
     QWidget* preview{};
     bool firmware_source_is_zip{};
+    bool keys_selection_changed{};
     bool firmware_imported{};
     bool installed_firmware_source_is_zip{};
     QString installed_keys_path;
