@@ -318,10 +318,11 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
                 }
             }
         } else {
-            const QString full = index.data(GameListItemPath::TitleRole).toString();
-            title = full.isEmpty()
-                        ? index.data(Qt::DisplayRole).toString().section(QLatin1Char('\n'), 0, 0)
-                        : full;
+            const QString display = index.data(Qt::DisplayRole).toString();
+            const QString full = display.isEmpty()
+                                     ? index.data(GameListItemPath::TitleRole).toString()
+                                     : display;
+            title = full.section(QLatin1Char('\n'), 0, 0);
         }
 
         painter->setPen(titleColor);

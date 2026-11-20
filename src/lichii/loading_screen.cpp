@@ -33,7 +33,9 @@
 // Mingw seems to not have QMovie at all. If QMovie is missing then use a single frame instead of an
 // showing the full animation
 #if !LICHII_QT_MOVIE_MISSING
+#include <QImageReader>
 #include <QMovie>
+#include <QSize>
 #endif
 
 constexpr char PROGRESSBAR_STYLE_PREPARE[] = R"(
@@ -320,7 +322,13 @@ void LoadingScreen::ApplyArtwork(const Snapshot& snapshot) {
             static_cast<int>(snapshot.banner.size()));
         backing_buf = std::make_unique<QBuffer>(backing_mem.get());
         backing_buf->open(QIODevice::ReadOnly);
+        QImageReader reader(backing_buf.get());
+        const QSize banner_size = reader.size();
+        backing_buf->seek(0);
         animation = std::make_unique<QMovie>(backing_buf.get(), QByteArray());
+        if (banner_size.isValid() && !banner_size.isEmpty()) {
+            animation->setScaledSize(banner_size.scaled(360, 140, Qt::KeepAspectRatio));
+        }
         animation->start();
         ui->banner->setMovie(animation.get());
 #endif

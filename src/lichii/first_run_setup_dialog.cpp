@@ -711,7 +711,7 @@ bool FirstRunSetupDialog::validateCurrentPage() {
         keys_selection_changed = false;
     }
 
-    const QString selected_firmware = firmware_path->text().trimmed();
+    const QString selected_firmware = firmware_path->text();
     if (selected_firmware.isEmpty()) {
         return true;
     }

@@ -25,8 +25,10 @@
 #include <QScrollBar>
 #include <QScroller>
 #include <QScrollerProperties>
+#include <QStyle>
 #include <QTimer>
 #include <QToolButton>
+
 #include <QFutureWatcher>
 #include <QVariantAnimation>
 #include <QtConcurrent/QtConcurrentRun>
@@ -95,16 +97,21 @@ GameList::GameList(FileSys::VirtualFilesystem vfs_, FileSys::ManualContentProvid
         const QPersistentModelIndex persistent_index{index};
         if (grid_mouse_left_double_click) {
             grid_mouse_activated = true;
-            QTimer::singleShot(0, this, [this, persistent_index] {
-                grid_mouse_activated = false;
-                if (persistent_index.isValid()) {
-                    ValidateEntry(persistent_index);
-                }
-            });
+            const bool activate_on_single_click = grid_view->style()->styleHint(
+                QStyle::SH_ItemView_ActivateItemOnSingleClick, nullptr, grid_view);
+            if (!activate_on_single_click) {
+                QTimer::singleShot(0, this, [this, persistent_index] {
+                    grid_mouse_activated = false;
+                    if (persistent_index.isValid()) {
+                        ValidateEntry(persistent_index);
+                    }
+                });
+            }
         }
         grid_mouse_left_double_click = false;
     });
     // Mouse double-clicks also emit activated right after doubleClicked, and both would boot the
+
     // game; a second boot while the first is still starting shuts it down again. Ignore activations
     // that arrive from the mouse so the grid keeps keyboard and controller activation only.
     connect(grid_view, &QListView::activated, this,
@@ -742,9 +749,11 @@ void GameList::ValidateEntry(const QModelIndex& item) {
     case GameListItemType::SysNandDir:
         // Folder cards are grid navigation; the tree expands its rows natively.
         if (m_currentView == grid_view) {
+            search_field->clear();
             grid_view->BrowseDirectory(selected.data(GameListDir::GameDirRole).toInt());
         }
         break;
+
     case GameListItemType::AddDir:
         emit AddDirectory();
         break;
@@ -1113,15 +1122,18 @@ void GameList::AddPermDirPopup(QMenu& context_menu, QModelIndex selected) {
         }
         return QModelIndex{};
     };
-    move_up->setEnabled(find_adjacent_directory(-1).isValid());
-    move_down->setEnabled(find_adjacent_directory(1).isValid());
-
+    const bool can_reorder = !system.IsPoweredOn();
+    move_up->setEnabled(can_reorder && find_adjacent_directory(-1).isValid());
+    move_down->setEnabled(can_reorder && find_adjacent_directory(1).isValid());
     const auto move_directory =
+
         [this, selected_directory, find_adjacent_directory, is_directory](int direction) {
-            if (!selected_directory.isValid() || !is_directory(selected_directory)) {
+            if (!selected_directory.isValid() || !is_directory(selected_directory) ||
+                system.IsPoweredOn()) {
                 return;
             }
             const QModelIndex neighbor = find_adjacent_directory(direction);
+
             if (!neighbor.isValid()) {
                 return;
             }

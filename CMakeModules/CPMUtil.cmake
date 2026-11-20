@@ -126,15 +126,19 @@ endmacro()
 # presigned asset URL after the redirect keeps working.
 function(cpmutil_netrc_args out_args)
     if(DEFINED ENV{GITHUB_TOKEN})
-        if(NOT CPMUTIL_NETRC OR NOT EXISTS "${CPMUTIL_NETRC}")
-            set(CPMUTIL_NETRC "${CMAKE_BINARY_DIR}/.cpmutil_netrc" CACHE INTERNAL
-                "Path to a netrc file for GitHub downloads" FORCE)
-            file(WRITE "${CPMUTIL_NETRC}" "")
+        if(DEFINED CMAKE_NETRC_FILE AND NOT "${CMAKE_NETRC_FILE}" STREQUAL "")
+            set(${out_args} NETRC OPTIONAL)
+        else()
+            if(NOT CPMUTIL_NETRC OR NOT EXISTS "${CPMUTIL_NETRC}")
+                set(CPMUTIL_NETRC "${CMAKE_BINARY_DIR}/.cpmutil_netrc" CACHE INTERNAL
+                    "Path to a netrc file for GitHub downloads" FORCE)
+                file(WRITE "${CPMUTIL_NETRC}" "")
+            endif()
+            file(CHMOD "${CPMUTIL_NETRC}" PERMISSIONS OWNER_READ OWNER_WRITE)
+            file(WRITE "${CPMUTIL_NETRC}"
+                "machine github.com login oauth2 password $ENV{GITHUB_TOKEN}\n")
+            set(${out_args} NETRC OPTIONAL NETRC_FILE "${CPMUTIL_NETRC}")
         endif()
-        file(CHMOD "${CPMUTIL_NETRC}" PERMISSIONS OWNER_READ OWNER_WRITE)
-        file(WRITE "${CPMUTIL_NETRC}"
-            "machine github.com login oauth2 password $ENV{GITHUB_TOKEN}\n")
-        set(${out_args} NETRC OPTIONAL NETRC_FILE "${CPMUTIL_NETRC}")
     else()
         unset(${out_args})
     endif()

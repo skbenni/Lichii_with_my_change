@@ -53,9 +53,10 @@ void GameCarousel::ApplyFilter(const QString& edit_filter_text, GameListModel* m
             continue;
 
         const auto type = item->data(GameListItem::TypeRole).value<GameListItemType>();
-        setRowHidden(i, type != GameListItemType::Game ||
-                            !Lichii::FilterMatches(edit_filter_text, item));
+        const bool show_item = type == GameListItemType::Game || type == GameListItemType::AddDir;
+        setRowHidden(i, !show_item || !Lichii::FilterMatches(edit_filter_text, item));
     }
+
 
     const QModelIndex current = currentIndex();
     if (current.isValid() && isRowHidden(current.row())) {

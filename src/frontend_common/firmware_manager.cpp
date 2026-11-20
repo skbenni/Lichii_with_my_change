@@ -71,9 +71,14 @@ std::filesystem::path StageKeyFiles(const std::filesystem::path& keys_dir,
     const auto nonce = static_cast<unsigned long long>(
                            std::chrono::steady_clock::now().time_since_epoch().count()) ^
                        std::random_device{}();
-    const auto staged = std::filesystem::temp_directory_path() /
-                        ("lichii-key-install-" + std::to_string(nonce));
+    std::error_code temp_error;
+    const auto temp_dir = std::filesystem::temp_directory_path(temp_error);
+    if (temp_error) {
+        return {};
+    }
+    const auto staged = temp_dir / ("lichii-key-install-" + std::to_string(nonce));
     std::error_code error;
+
     if (!std::filesystem::create_directories(staged, error) || error) {
         return {};
     }
