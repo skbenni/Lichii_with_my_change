@@ -96,10 +96,10 @@ GameList::GameList(FileSys::VirtualFilesystem vfs_, FileSys::ManualContentProvid
     connect(grid_view, &QListView::doubleClicked, this, [this](const QModelIndex& index) {
         const QPersistentModelIndex persistent_index{index};
         if (grid_mouse_left_double_click) {
-            grid_mouse_activated = true;
             const bool activate_on_single_click = grid_view->style()->styleHint(
                 QStyle::SH_ItemView_ActivateItemOnSingleClick, nullptr, grid_view);
             if (!activate_on_single_click) {
+                grid_mouse_activated = true;
                 QTimer::singleShot(0, this, [this, persistent_index] {
                     grid_mouse_activated = false;
                     if (persistent_index.isValid()) {

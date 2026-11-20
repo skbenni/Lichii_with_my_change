@@ -87,11 +87,30 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
         bool visible = false;
         if (browsed_dir >= 0) {
             if (type == GameListItemType::Game) {
-                visible = item->data(GameListItemPath::OwnerDirRole).toInt() == browsed_dir &&
-                          Lichii::FilterMatches(edit_filter_text, item);
+                bool in_browsed_dir = false;
+                const QVariant owner_dir = item->data(GameListItemPath::OwnerDirRole);
+                if (owner_dir.isValid()) {
+                    in_browsed_dir = owner_dir.toInt() == browsed_dir;
+                }
+                if (!in_browsed_dir && browsed_dir < UISettings::values.game_dirs.size()) {
+                    QString dir_path = QString::fromStdString(
+                        UISettings::values.game_dirs[browsed_dir].path);
+                    dir_path.replace(QLatin1Char('\\'), QLatin1Char('/'));
+                    if (!dir_path.isEmpty()) {
+                        if (!dir_path.endsWith(QLatin1Char('/'))) {
+                            dir_path.append(QLatin1Char('/'));
+                        }
+                        QString game_path =
+                            item->data(GameListItemPath::FullPathRole).toString();
+                        game_path.replace(QLatin1Char('\\'), QLatin1Char('/'));
+                        in_browsed_dir = game_path.startsWith(dir_path, Qt::CaseInsensitive);
+                    }
+                }
+                visible = in_browsed_dir && Lichii::FilterMatches(edit_filter_text, item);
             }
         } else if (type == GameListItemType::Game) {
             visible = !edit_filter_text.isEmpty() &&
+
                       Lichii::FilterMatches(edit_filter_text, item);
         } else if (type == GameListItemType::CustomDir || type == GameListItemType::AddDir ||
                    type == GameListItemType::SdmcDir ||
