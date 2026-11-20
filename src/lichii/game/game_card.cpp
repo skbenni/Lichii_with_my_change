@@ -220,9 +220,10 @@ void GameCard::paint(QPainter* painter, const QStyleOptionViewItem& option,
     painter->drawRoundedRect(cardRect, radius, radius);
 
     const u32 icon_size = UISettings::values.game_cover_size.GetValue();
-    const QPixmap icon_pixmap = game_folder || add_folder
+    const QString card_icon_key = index.data(GameListItemPath::CardIconRole).toString();
+    const QPixmap icon_pixmap = game_folder || add_folder || card_icon_key.isEmpty()
                                     ? QPixmap{}
-                                    : index.data(GameListItemPath::CardIconRole).value<QPixmap>();
+                                    : GameListItemPath::CardArtCache::Lookup(card_icon_key);
     const bool has_icon = !game_folder && !add_folder &&
                           index.data(GameListItemPath::HasIconRole).toBool();
     const bool folder_cards = option.widget &&
@@ -390,13 +391,22 @@ bool GameCard::hitTest(const QPoint& point, const QModelIndex& index, const QWid
 }
 
 QSize GameCard::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
-    return m_size;
+    QSize size = m_size;
+    const auto item_type = index.data(GameListItem::TypeRole).value<GameListItemType>();
+    const bool folder_card = IsGameDirectory(item_type) || item_type == GameListItemType::AddDir;
+    const bool folder_labels = option.widget &&
+                               option.widget->objectName() == QStringLiteral("gameGridView");
+    if (folder_card && folder_labels) {
+        size.setHeight(size.height() + m_folder_label_extra_height);
+    }
+    return size;
 }
 
 void GameCard::setSize(const QSize& newSize, const QSize& contentSize, const int padding,
-                       const int columns) {
+                       const int columns, const int folder_label_extra_height) {
     m_size = newSize;
     m_contentSize = contentSize;
     m_padding = padding;
     m_columns = columns;
+    m_folder_label_extra_height = folder_label_extra_height;
 }

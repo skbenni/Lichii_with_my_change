@@ -176,6 +176,13 @@ bool InstallFirmware(const QString& location, bool recursive) {
         return false;
     }
 
+    if (FirmwareManager::VerifyFirmware(*system) != FirmwareManager::FirmwareGood) {
+        result = FirmwareInstallResult::FailedCorrupted;
+        icon = QtCommon::Frontend::Icon::Warning;
+        ShowMessage();
+        return false;
+    }
+
     progress->close();
     QGuiApplication::processEvents();
 

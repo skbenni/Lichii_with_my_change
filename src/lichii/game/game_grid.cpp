@@ -18,12 +18,13 @@
 #include "lichii/game/game_grid.h"
 
 GameGrid::GameGrid(QWidget* parent) : QListView{parent} {
+    setObjectName(QStringLiteral("gameGridView"));
     m_gameCard = new GameCard(this);
     setItemDelegate(m_gameCard);
 
     setViewMode(QListView::ListMode);
     setResizeMode(QListView::Fixed);
-    setUniformItemSizes(true);
+    setUniformItemSizes(false);
     setSelectionMode(QAbstractItemView::SingleSelection);
     setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -85,6 +86,9 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
                 visible = item->data(GameListItemPath::OwnerDirRole).toInt() == browsed_dir &&
                           Lichii::FilterMatches(edit_filter_text, item);
             }
+        } else if (type == GameListItemType::Game) {
+            visible = !edit_filter_text.isEmpty() &&
+                      Lichii::FilterMatches(edit_filter_text, item);
         } else if (type == GameListItemType::CustomDir || type == GameListItemType::AddDir ||
                    type == GameListItemType::SdmcDir ||
                    type == GameListItemType::UserNandDir ||
@@ -156,34 +160,36 @@ void GameGrid::UpdateNavigationBarGeometry() {
 void GameGrid::UpdateIconSize() {
     const u32 icon_size = UISettings::values.game_cover_size.GetValue();
 
-    int heightMargin = 0;
+    int named_height_margin = 24;
     // The card hugs the icon; the title wraps to the icon's width, so extra width is only
     // needed for the "no icon" case. Leftover row space becomes the gap between cards.
     int widthMargin = 24;
 
-    if (UISettings::values.show_game_name) {
-        switch (icon_size) {
-        case 128:
-        case 160:
-            heightMargin = 65;
-            break;
-        case 0:
+    switch (icon_size) {
+    case 128:
+    case 160:
+        named_height_margin = 65;
+        break;
+    case 0:
+        named_height_margin = 120;
+        if (UISettings::values.show_game_name) {
             widthMargin = 120;
-            heightMargin = 120;
-            break;
-        case 44:
-        case 64:
-            heightMargin = 77;
-            break;
-        case 32:
-        case 256:
-            heightMargin = 81;
-            break;
         }
-    } else {
-        widthMargin = 24;
-        heightMargin = 24;
+        break;
+    case 44:
+    case 64:
+        named_height_margin = 77;
+        break;
+    case 32:
+    case 256:
+        named_height_margin = 81;
+        break;
     }
+
+    const bool show_game_name = UISettings::values.show_game_name.GetValue();
+    const int height_margin = show_game_name ? named_height_margin : 24;
+    const int folder_label_extra_height =
+        show_game_name ? 0 : std::max(0, named_height_margin - height_margin);
 
     const int view_width = viewport()->width();
 
@@ -193,12 +199,17 @@ void GameGrid::UpdateIconSize() {
     int columns = std::max(1, (view_width - 16) / min_item_width);
     int stretched_width = ((view_width) - (spacing * (columns - 1))) / columns;
 
-    QSize grid_size(stretched_width, icon_size + heightMargin);
-    if (gridSize() != grid_size) {
+    const QSize grid_size(stretched_width, icon_size + height_margin);
+    if (m_cell_size != grid_size || m_folder_label_extra_height != folder_label_extra_height ||
+        m_columns != columns) {
         setUpdatesEnabled(false);
 
-        setGridSize(grid_size);
-        m_gameCard->setSize(grid_size, grid_size, stretched_width - min_item_width, columns);
+        setGridSize(QSize{});
+        m_gameCard->setSize(grid_size, grid_size, stretched_width - min_item_width, columns,
+                            folder_label_extra_height);
+        m_cell_size = grid_size;
+        m_folder_label_extra_height = folder_label_extra_height;
+        m_columns = columns;
 
         setUpdatesEnabled(true);
     }

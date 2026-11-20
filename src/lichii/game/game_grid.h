@@ -43,6 +43,9 @@ private:
     QToolButton* back_button = nullptr;
     QLabel* folder_title = nullptr;
     int browsed_dir = -1;
+    int m_columns = 0;
+    int m_folder_label_extra_height = 0;
+    QSize m_cell_size;
     QString last_filter_text;
 
     void UpdateNavigationBarGeometry();

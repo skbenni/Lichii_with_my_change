@@ -1229,7 +1229,7 @@ void MainWindow::InitializeWidgets() {
     ui->horizontalLayout->addWidget(loading_screen);
     connect(loading_screen, &LoadingScreen::Hidden, this, [&] {
         loading_screen->Clear();
-        if (emulation_running) {
+        if (emulation_running && modern_loading_screen) {
             render_window->show();
             render_window->setFocus();
         }
@@ -1240,7 +1240,7 @@ void MainWindow::InitializeWidgets() {
     ui->horizontalLayout->addWidget(classic_loading_screen);
     connect(classic_loading_screen, &ClassicLoadingScreen::Hidden, this, [&] {
         classic_loading_screen->Clear();
-        if (emulation_running) {
+        if (emulation_running && !modern_loading_screen) {
             render_window->show();
             render_window->setFocus();
         }
