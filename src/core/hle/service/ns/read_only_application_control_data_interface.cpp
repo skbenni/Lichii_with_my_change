@@ -20,6 +20,7 @@
 #include "core/hle/service/cmif_serialization.h"
 #include "core/hle/service/cmif_types.h"
 #include "core/hle/service/hle_ipc.h"
+#include "core/hle/service/ns/game_list_applications.h"
 #include "core/hle/service/ns/language.h"
 #include "core/hle/service/ns/ns_types.h"
 #include "core/hle/service/ns/ns_results.h"
@@ -156,8 +157,7 @@ Result IReadOnlyApplicationControlDataInterface::GetApplicationControlData(
     LOG_INFO(Service_NS, "called with control_source={}, application_id={:016X}",
              application_control_source, application_id);
 
-    const FileSys::PatchManager pm{application_id, system.GetFileSystemController(), system.GetContentProvider()};
-    const auto control = pm.GetControlMetadata();
+    const auto control = GetApplicationControlMetadata(system, application_id);
     const auto size = out_buffer.size();
 
     const auto icon_size = control.second ? control.second->GetSize() : 0;
@@ -238,9 +238,7 @@ Result IReadOnlyApplicationControlDataInterface::GetApplicationControlData2(
     LOG_INFO(Service_NS, "called with control_source={}, flags=({:02X},{:02X}), application_id={:016X}",
              application_control_source, flag1, flag2, application_id);
 
-    const FileSys::PatchManager pm{application_id, system.GetFileSystemController(),
-                                   system.GetContentProvider()};
-    const auto control = pm.GetControlMetadata();
+    const auto control = GetApplicationControlMetadata(system, application_id);
     const auto size = out_buffer.size();
 
     const auto nacp_size = sizeof(FileSys::RawNACP);
@@ -298,43 +296,33 @@ Result IReadOnlyApplicationControlDataInterface::GetApplicationControlData2(
 }
 
 void IReadOnlyApplicationControlDataInterface::ListApplicationIcon(HLERequestContext& ctx) {
-    LOG_WARNING(Service_NS, "(stubbed)");
+    LOG_DEBUG(Service_NS, "called");
     const auto app_ids_buffer = ctx.ReadBuffer();
     const u64 app_count = app_ids_buffer.size() / sizeof(u64);
     auto t_mem_obj = ctx.GetObjectFromHandle<Kernel::KTransferMemory>(ctx.GetCopyHandle(0));
     auto* t_mem = t_mem_obj.GetPointerUnsafe();
     size_t out_length = 0;
-    if (t_mem != nullptr && t_mem->GetOwner() != nullptr && app_count > 0) {
+    if (t_mem != nullptr && t_mem->GetOwner() != nullptr && app_count > 0 &&
+        t_mem->GetSize() / sizeof(u64) > app_count) {
         auto& memory = t_mem->GetOwner()->GetMemory();
         const auto t_mem_address = t_mem->GetSourceAddress();
-        // u64 - app count
         memory.WriteBlock(t_mem_address + out_length, &app_count, sizeof(u64));
-        out_length += sizeof(u64);
-        ASSERT(out_length <= t_mem->GetSize());
-        // [list of u64] - size of icons
+        out_length = (app_count + 1) * sizeof(u64);
         for (size_t i = 0; i < app_count; ++i) {
-            const u64 app_id = app_ids_buffer[i];
-            const FileSys::PatchManager pm{app_id, system.GetFileSystemController(), system.GetContentProvider()};
-            if (const auto control = pm.GetControlMetadata(); control.second) {
-                u64 full_size = control.second->GetSize();
-                memory.WriteBlock(t_mem_address + out_length, &full_size, sizeof(u64));
-            }
-            out_length += sizeof(u64);
-            ASSERT(out_length <= t_mem->GetSize());
-        }
-        // [list of raw icon data]
-        for (size_t i = 0; i < app_count; ++i) {
-            const u64 app_id = app_ids_buffer[i];
-            const FileSys::PatchManager pm{app_id, system.GetFileSystemController(), system.GetContentProvider()};
-            if (const auto control = pm.GetControlMetadata(); control.second) {
-                if (auto const full_size = control.second->GetSize(); full_size > 0) {
-                    std::vector<u8> full_icon_data(full_size);
-                    control.second->Read(full_icon_data.data(), full_size, 0);
-                    memory.WriteBlock(t_mem_address + out_length, full_icon_data.data(), full_size);
-                    out_length += full_size;
-                    ASSERT(out_length <= t_mem->GetSize());
+            u64 app_id{};
+            std::memcpy(&app_id, app_ids_buffer.data() + i * sizeof(app_id), sizeof(app_id));
+            const auto control = GetApplicationControlMetadata(system, app_id);
+            u64 icon_size{};
+            if (control.second != nullptr) {
+                const auto size = control.second->GetSize();
+                if (size > 0 && size <= t_mem->GetSize() - out_length) {
+                    const auto icon = control.second->ReadBytes(size);
+                    icon_size = icon.size();
+                    memory.WriteBlock(t_mem_address + out_length, icon.data(), icon.size());
+                    out_length += icon.size();
                 }
             }
+            memory.WriteBlock(t_mem_address + (i + 1) * sizeof(u64), &icon_size, sizeof(icon_size));
         }
     }
     auto async_value = std::make_shared<IAsyncValue>(system, 0, s32(out_length));
@@ -363,9 +351,7 @@ void IReadOnlyApplicationControlDataInterface::ListApplicationTitle(HLERequestCo
         const auto t_mem_address = t_mem->GetSourceAddress();
         for (size_t i = 0; i < app_count; ++i) {
             const u64 app_id = application_ids[i];
-            const FileSys::PatchManager pm{app_id, system.GetFileSystemController(),
-                                           system.GetContentProvider()};
-            const auto control = pm.GetControlMetadata();
+            const auto control = GetApplicationControlMetadata(system, app_id, false);
             FileSys::LanguageEntry entry{};
             if (control.first != nullptr) {
                 entry = control.first->GetLanguageEntry();
@@ -385,9 +371,7 @@ Result IReadOnlyApplicationControlDataInterface::GetApplicationControlData3(OutB
     LOG_INFO(Service_NS, "called with control_source={}, flags=({:02X},{:02X}), application_id={:016X}",
              application_control_source, flag1, flag2, application_id);
 
-    const FileSys::PatchManager pm{application_id, system.GetFileSystemController(),
-                                   system.GetContentProvider()};
-    const auto control = pm.GetControlMetadata();
+    const auto control = GetApplicationControlMetadata(system, application_id);
     const auto size = out_buffer.size();
 
     const auto nacp_size = sizeof(FileSys::RawNACP);

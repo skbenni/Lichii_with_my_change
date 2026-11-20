@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <openssl/evp.h>
 
+#include "core/core.h"
 #include "core/file_sys/common_funcs.h"
 #include "core/file_sys/content_archive.h"
 #include "core/file_sys/control_metadata.h"
@@ -26,7 +27,9 @@
 #include "core/file_sys/romfs.h"
 #include "core/file_sys/vfs/vfs_real.h"
 #include "core/file_sys/vfs/vfs_vector.h"
+#include "core/hle/service/ns/game_list_applications.h"
 #include "core/loader/nup.h"
+#include "tests/core/system_test_context.h"
 
 namespace {
 
@@ -150,6 +153,100 @@ std::map<std::string, std::string> PackedTree(const FileSys::VirtualDir& dir) {
 }
 
 constexpr u64 TitleId = 0x0400ABCD00010000ULL;
+
+TEST_CASE("A NUP without its program metadata has no forwarder ID", "[nup][home_menu]") {
+    TempDir tmp;
+    const auto root = tmp.path / "Game";
+    Put(root / "base/exefs/main", "main");
+    Put(root / "base/exefs/main.npdm", Npdm(TitleId));
+    Put(root / "base/romfs/base.bin", "base");
+    const auto archive = tmp.path / "Game.nup";
+    REQUIRE(FileSys::Nup::PackDump(root, archive) == FileSys::Nup::PackResult::Success);
+
+    auto bytes = ReadAll(archive);
+    const auto toc = Le(bytes, 8, 8);
+    const auto name = bytes.find("main.npdm", toc);
+    REQUIRE(name != std::string::npos);
+    bytes[name] = 'x';
+    const auto hash = Sha256(std::string_view{bytes}.substr(toc, Le(bytes, 0x10, 8)));
+    std::copy(hash.begin(), hash.end(), bytes.begin() + 0x18);
+
+    Loader::AppLoader_NUP loader{std::make_shared<FileSys::VectorVfsFile>(
+        std::vector<u8>(bytes.begin(), bytes.end()), "Game.nup")};
+    u64 id{};
+    CHECK(loader.ReadProgramId(id) != Loader::ResultStatus::Success);
+}
+
+TEST_CASE("HOME forwarders neither pin NUP files nor borrow another program's metadata",
+          "[nup][home_menu]") {
+    TempDir tmp;
+    const auto root = tmp.path / "Game";
+    Put(root / "base/exefs/main", "main");
+    Put(root / "base/exefs/main.npdm", Npdm(TitleId));
+    Put(root / "base/romfs/base.bin", "base");
+    const auto archive = tmp.path / "Game.nup";
+    FileSys::Nup::PackOptions options;
+    options.metadata.title_name = "Before";
+    options.metadata.icon = {0xFF, 0xD8, 0xFF, 0xD9};
+    REQUIRE(FileSys::Nup::PackDump(root, archive, options) == FileSys::Nup::PackResult::Success);
+
+    ScopedSystemTestContext environment;
+    std::vector<u8> artwork{1, 2, 3};
+    std::vector<u64> artwork_requests;
+    FileSys::ManualContentProvider provider{[&](u64 id) {
+        artwork_requests.push_back(id);
+        return artwork;
+    }};
+    Core::System system;
+    auto vfs = std::make_shared<FileSys::RealVfsFilesystem>();
+    system.SetFilesystem(vfs);
+    system.SetContentProvider(std::make_unique<FileSys::ContentProviderUnion>());
+    system.RegisterContentProvider(FileSys::ContentProviderUnionSlot::FrontendManual, &provider);
+    const auto path = Common::FS::PathToUTF8String(archive);
+    std::weak_ptr<FileSys::VfsFile> scanned_file;
+    {
+        const auto file = vfs->OpenFile(path, FileSys::OpenMode::Read);
+        scanned_file = file;
+        Loader::AppLoader_NUP loader{file};
+        u64 id{};
+        REQUIRE(loader.ReadProgramId(id) == Loader::ResultStatus::Success);
+        REQUIRE(id == TitleId);
+        provider.ReplaceApplicationPaths({{TitleId, path}, {TitleId + 1, path}});
+    }
+    CHECK(scanned_file.expired());
+
+    CHECK_FALSE(Service::NS::OpenGameListApplication(system, path, TitleId + 1));
+    const auto mismatched = Service::NS::GetApplicationControlMetadata(system, TitleId + 1);
+    CHECK(mismatched.first == nullptr);
+    CHECK(mismatched.second == nullptr);
+    CHECK(artwork_requests.empty());
+
+    FileSys::Nup::MetadataEdit edit;
+    edit.title_name = "After";
+    REQUIRE(FileSys::Nup::EditNupMetadata(archive, edit) == FileSys::Nup::EditResult::Success);
+    CHECK(Service::NS::OpenGameListApplication(system, path, TitleId));
+    const auto title_only = Service::NS::GetApplicationControlMetadata(system, TitleId, false);
+    REQUIRE(title_only.first != nullptr);
+    CHECK(title_only.first->GetApplicationName() == "After");
+    CHECK(title_only.second == nullptr);
+    CHECK(artwork_requests.empty());
+    const auto metadata = Service::NS::GetApplicationControlMetadata(system, TitleId);
+    REQUIRE(metadata.first != nullptr);
+    CHECK(metadata.first->GetApplicationName() == "After");
+    REQUIRE(metadata.second != nullptr);
+    CHECK(metadata.second->ReadAllBytes() == artwork);
+    CHECK(artwork_requests == std::vector<u64>{TitleId});
+
+    artwork = {4, 5};
+    const auto refreshed = Service::NS::GetApplicationControlMetadata(system, TitleId);
+    REQUIRE(refreshed.second != nullptr);
+    CHECK(refreshed.second->ReadAllBytes() == artwork);
+
+    artwork.clear();
+    const auto fallback = Service::NS::GetApplicationControlMetadata(system, TitleId);
+    REQUIRE(fallback.second != nullptr);
+    CHECK(fallback.second->ReadAllBytes() == options.metadata.icon);
+}
 
 TEST_CASE("NUP add-ons are readable through the manual content provider", "[nup][nup-content]") {
     TempDir tmp;

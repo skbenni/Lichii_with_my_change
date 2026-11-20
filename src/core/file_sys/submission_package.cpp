@@ -141,6 +141,13 @@ std::vector<u64> NSP::GetProgramTitleIDs() const {
     return out;
 }
 
+std::vector<u64> NSP::GetApplicationProgramTitleIDs() const {
+    if (IsExtractedType()) {
+        return {GetExtractedTitleID()};
+    }
+    return {application_program_ids.begin(), application_program_ids.end()};
+}
+
 bool NSP::IsExtractedType() const {
     return extracted;
 }
@@ -308,6 +315,11 @@ void NSP::ReadNCAs(const std::vector<VirtualFile>& files) {
                 if (next_nca->GetType() == NCAContentType::Program) {
                     program_status[next_nca->GetTitleId()] = next_nca->GetStatus();
                     program_ids.insert(next_nca->GetTitleId() & 0xFFFFFFFFFFFFF000);
+                    if (cnmt.GetType() == TitleType::Application &&
+                        rec.type == ContentRecordType::Program && rec.id_offset == 0 &&
+                        next_nca->GetStatus() == Loader::ResultStatus::Success) {
+                        application_program_ids.insert(next_nca->GetTitleId());
+                    }
                 }
 
                 // If the last 3 hexadecimal digits of the CNMT TitleID is 0x800 or is missing the

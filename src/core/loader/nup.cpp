@@ -168,8 +168,6 @@ AppLoader_NUP::AppLoader_NUP(FileSys::VirtualFile file_)
             display_title = name;
         }
     }
-    has_program = true;
-
     const auto exefs = nup->GetExeFSDir(*exefs_index);
     if (exefs == nullptr || exefs->GetFile("main") == nullptr ||
         exefs->GetFile("main.npdm") == nullptr) {
@@ -177,6 +175,7 @@ AppLoader_NUP::AppLoader_NUP(FileSys::VirtualFile file_)
         return;
     }
     secondary_loader = std::make_unique<AppLoader_DeconstructedRomDirectory>(exefs, true, false);
+    has_program = true;
 
     if (update_index) {
         const auto& update = nup->GetPackages()[*update_index];

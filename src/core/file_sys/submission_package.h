@@ -38,6 +38,7 @@ public:
     u64 GetProgramTitleID() const;
     u64 GetExtractedTitleID() const;
     std::vector<u64> GetProgramTitleIDs() const;
+    std::vector<u64> GetApplicationProgramTitleIDs() const;
 
     bool IsExtractedType() const;
 
@@ -85,6 +86,7 @@ private:
     // Map title id -> {map type -> NCA}
     std::map<u64, std::map<std::pair<TitleType, ContentRecordType>, std::shared_ptr<NCA>>> ncas;
     std::set<u64> program_ids;
+    std::set<u64> application_program_ids;
     std::vector<VirtualFile> ticket_files;
 
     Core::Crypto::KeyManager& keys;

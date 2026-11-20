@@ -378,6 +378,35 @@ std::vector<u8> MakeDiscoveryNca(u64 title_id, NcaHeader::ContentType type,
     return bytes;
 }
 
+TEST_CASE("NSP application discovery preserves a standalone Switch 2 Edition ID",
+          "[core][file_sys][home_menu]") {
+    constexpr u64 Base = 0x0100152000022000ULL;
+    constexpr u64 Edition = 0x04004D300C5AE001ULL;
+    std::vector<std::pair<std::string, std::vector<u8>>> files;
+    for (const u64 id : {Base, Edition}) {
+        CNMTHeader header{};
+        header.title_id = id;
+        header.type = TitleType::Application;
+        header.table_offset = sizeof(OptionalHeader);
+        header.number_content_entries = 1;
+        ContentRecord record{};
+        record.nca_id.fill(id == Base ? 0x11 : 0x22);
+        record.type = ContentRecordType::Program;
+        const CNMT cnmt{header, {}, {record}, {}};
+        files.emplace_back(std::to_string(id) + ".cnmt.nca",
+                           MakeDiscoveryNca(id, NcaHeader::ContentType::Meta,
+                                            MakePfs0WithFiles({{"title.cnmt", cnmt.Serialize()}})));
+        const std::string program_name(32, id == Base ? '1' : '2');
+        files.emplace_back(program_name + ".nca",
+                           MakeDiscoveryNca(id, NcaHeader::ContentType::Program,
+                                            MakePfs0WithFiles({{"main", {0}}})));
+    }
+    const NSP nsp{MakeFile(MakePfs0WithFiles(files))};
+    CHECK(nsp.GetApplicationProgramTitleIDs() == std::vector<u64>{Base, Edition});
+    const NSP selected{MakeFile(MakePfs0WithFiles(files)), Edition};
+    CHECK(selected.GetProgramTitleID() == Edition);
+}
+
 TEST_CASE("NSP discovery skips unreadable NCA metadata", "[core][file_sys][nca_discovery]") {
     if (Core::Crypto::KeyManager::Instance().HasKey(Core::Crypto::S256KeyType::Header)) {
         SKIP("A header key is installed");
