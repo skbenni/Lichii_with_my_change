@@ -221,6 +221,8 @@ TEST_CASE("NX: reads span blocks, codecs and the reader's read limit", "[core][n
 TEST_CASE("NX: upstream conformance fixtures", "[core][nx]") {
     ScopedSystemTestContext environment;
     Core::System system;
+    // As every frontend does: the native loader reads the content provider.
+    system.SetContentProvider(std::make_unique<FileSys::ContentProviderUnion>());
     for (const auto name : InvalidFixtures) {
         INFO(name);
         Loader::AppLoader_NX loader{system, OpenFixture(name)};

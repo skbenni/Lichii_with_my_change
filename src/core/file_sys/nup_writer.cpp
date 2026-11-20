@@ -232,7 +232,10 @@ void PutLE(std::vector<u8>& buffer, size_t offset, u64 value, size_t bytes) {
 }
 
 void PutBytes(std::vector<u8>& buffer, size_t offset, std::span<const u8> bytes) {
-    std::memcpy(buffer.data() + offset, bytes.data(), bytes.size());
+    // memcpy takes no null pointers, not even for zero bytes: an empty span can hold one.
+    if (!bytes.empty()) {
+        std::memcpy(buffer.data() + offset, bytes.data(), bytes.size());
+    }
 }
 
 using Digest = std::array<u8, 32>;
