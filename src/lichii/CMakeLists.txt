@@ -455,7 +455,7 @@ endif()
 
 target_link_libraries(lichii PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(lichii PRIVATE common core input_common frontend_common network video_core qt_common)
-target_link_libraries(lichii PRIVATE Boost::headers Qt6::Widgets Qt6::Concurrent Qt6::Network)
+target_link_libraries(lichii PRIVATE Boost::headers Qt6::Widgets Qt6::Concurrent Qt6::Network Qt6::Svg)
 # Unpacks NVIDIA's files from the Streamline release (nvidia_dlss_panel.cpp).
 target_link_libraries(lichii PRIVATE ZLIB::ZLIB)
 if (WIN32)
