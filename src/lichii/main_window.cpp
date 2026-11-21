@@ -67,6 +67,7 @@
 #include "applets/qt_software_keyboard.h"
 #include "applets/qt_web_browser.h"
 
+#include "configuration/configuration_shared.h"
 #include "configuration/configure_dialog.h"
 #include "configuration/configure_input.h"
 #include "configuration/configure_network.h"
@@ -89,6 +90,7 @@
 #include <QActionGroup>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QDate>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDesktopServices>
@@ -466,6 +468,7 @@ MainWindow::MainWindow(bool has_broken_vulkan)
 
     Common::FS::CreateEdenPaths();
     this->config = std::make_unique<QtConfig>();
+    const bool first_start = UISettings::values.first_start.GetValue();
 
     Common::Log::Filter filter;
     filter.ParseFilterString(Settings::values.log_filter.GetValue());
@@ -493,14 +496,6 @@ MainWindow::MainWindow(bool has_broken_vulkan)
 
     default_theme_paths = QIcon::themeSearchPaths();
 
-    // The first launch after an interface update switches to Lichii Dark and explains what moved.
-    const bool whats_new_pending =
-        UISettings::values.whats_new_version.GetValue() < WhatsNewDialog::Version;
-    if (whats_new_pending) {
-        UISettings::values.whats_new_version = WhatsNewDialog::Version;
-        UISettings::values.theme =
-            UISettings::themes[static_cast<size_t>(UISettings::Theme::LichiiDark)].second;
-    }
     UpdateUITheme();
 
     SetDiscordEnabled(UISettings::values.enable_discord_presence.GetValue());
@@ -674,13 +669,16 @@ MainWindow::MainWindow(bool has_broken_vulkan)
     }
     SetGameListMode(UISettings::values.game_list_mode.GetValue(), false);
     game_list->SetScanEnabled(true);
+
+    const auto build = WhatsNewDialog::ParseBuildTag(Common::g_build_release_tag);
+    const auto whats_new_action = WhatsNewDialog::OnStartup(
+        build, UISettings::values.last_seen_release.GetValue(), first_start, direct_launch,
+        LICHII_USE_PENDING_RELEASE_NOTES);
+    if (whats_new_action == WhatsNewDialog::StartupAction::Remember) {
+        config->SaveLastSeenRelease(build);
+    }
     if (!launch_home) {
         game_list->PopulateAsync(UISettings::values.game_dirs);
-    }
-
-    if (whats_new_pending && !UISettings::values.first_start.GetValue() &&
-        UISettings::values.show_whats_new.GetValue()) {
-        QTimer::singleShot(0, this, &MainWindow::OnWhatsNew);
     }
 
     // make sure menubar has the arrow cursor instead of inheriting from this
@@ -816,6 +814,10 @@ MainWindow::MainWindow(bool has_broken_vulkan)
 
     if (!launch_home) {
         ScheduleDeferredLibraryStylePrompt();
+    }
+    if (whats_new_action == WhatsNewDialog::StartupAction::Show) {
+        startup_whats_new_pending = true;
+        QTimer::singleShot(0, this, &MainWindow::MaybeShowStartupWhatsNew);
     }
 }
 
@@ -1872,6 +1874,8 @@ void MainWindow::ConnectWidgetEvents() {
             &MainWindow::OnGameListPrepareShaderWarm);
     connect(game_list, &GameList::DeleteShaderWarmRequested, this,
             &MainWindow::OnGameListDeleteShaderWarm);
+    connect(game_list, &GameList::PrecompileShadersRequested, this,
+            &MainWindow::OnGameListPrecompileShaders);
     connect(game_list, &GameList::ExtractNupRequested, this, &MainWindow::OnGameListExtractNup);
     connect(game_list, &GameList::EditNupMetadataRequested, this,
             &MainWindow::OnGameListEditNupMetadata);
@@ -2466,6 +2470,9 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
     if (boot_in_progress || close_pending) {
         return;
     }
+    if (whats_new_dialog) {
+        whats_new_dialog->close();
+    }
     disconnect(startup_qlaunch_connection);
     boot_in_progress = true;
     game_list->SetScanEnabled(false);
@@ -2479,6 +2486,9 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
             game_list->SetScanEnabled(true);
             game_list->PopulateAsync(UISettings::values.game_dirs);
             ScheduleDeferredLibraryStylePrompt();
+            if (startup_whats_new_pending) {
+                QTimer::singleShot(0, this, &MainWindow::MaybeShowStartupWhatsNew);
+            }
         }
         if (close_pending) {
             QTimer::singleShot(0, this, &QWidget::close);
@@ -2795,9 +2805,8 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
     if (metadata.first != nullptr) {
         title_version = metadata.first->GetVersionString();
         title_name = metadata.first->GetApplicationName();
-    } else if (FileSys::NACP control; QtCommon::system->GetAppLoader().ReadControlData(control) ==
-                                      Loader::ResultStatus::Success) {
-        title_version = control.GetVersionString();
+    } else {
+        QtCommon::system->GetAppLoader().ReadDisplayVersion(title_version);
     }
     if (res != Loader::ResultStatus::Success || title_name.empty()) {
         title_name = Common::FS::PathToUTF8String(
@@ -3168,6 +3177,9 @@ void MainWindow::OnEmulationStopped() {
         }
         game_list->SetScanEnabled(true);
         game_list->PopulateAsync(UISettings::values.game_dirs);
+        if (startup_whats_new_pending) {
+            QTimer::singleShot(0, this, &MainWindow::MaybeShowStartupWhatsNew);
+        }
     }
 }
 
@@ -3796,10 +3808,9 @@ void MainWindow::OnMenuLoadFolder() {
         return;
     }
 
-    const QDir dir{dir_path};
-    const QStringList matching_main = dir.entryList({QStringLiteral("main")}, QDir::Files);
-    if (matching_main.size() == 1) {
-        BootGame(dir.path() + QDir::separator() + matching_main[0], ApplicationAppletParameters());
+    const auto main = Core::GetGameFileFromPath(QtCommon::vfs, dir_path.toStdString());
+    if (main) {
+        BootGame(QString::fromStdString(main->GetFullPath()), ApplicationAppletParameters());
     } else {
         QMessageBox::warning(this, tr("Invalid Directory Selected"),
                              tr("The directory you have selected does not contain a 'main' file."));
@@ -5038,11 +5049,49 @@ void MainWindow::OnInstallDecryptionKeys() {
     OnCheckFirmwareDecryption();
 }
 
+void MainWindow::MaybeShowStartupWhatsNew() {
+    if (!startup_whats_new_pending || !isVisible() || UISettings::values.first_start.GetValue() ||
+        boot_in_progress || emulation_running || close_pending) {
+        return;
+    }
+    constexpr auto retry_connection = Qt::ConnectionType(Qt::QueuedConnection |
+                                                         Qt::SingleShotConnection |
+                                                         Qt::UniqueConnection);
+#ifdef ENABLE_UPDATE_CHECKER
+    if (update_check_running) {
+        connect(&update_watcher, &QFutureWatcher<UpdateChecker::CheckResult>::finished, this,
+                &MainWindow::MaybeShowStartupWhatsNew, retry_connection);
+        return;
+    }
+#endif
+    if (auto* const modal = QApplication::activeModalWidget()) {
+        if (auto* const dialog = qobject_cast<QDialog*>(modal)) {
+            connect(dialog, &QDialog::finished, this, &MainWindow::MaybeShowStartupWhatsNew,
+                    retry_connection);
+        }
+        return;
+    }
+    OnWhatsNew();
+}
+
 void MainWindow::OnWhatsNew() {
-    WhatsNewDialog dialog(this);
-    dialog.exec();
-    if (dialog.OpenConfigureRequested()) {
-        OnConfigure();
+    startup_whats_new_pending = false;
+    if (whats_new_dialog && whats_new_dialog->isVisible()) {
+        whats_new_dialog->raise();
+        whats_new_dialog->activateWindow();
+        return;
+    }
+
+    const auto build = WhatsNewDialog::ParseBuildTag(Common::g_build_release_tag);
+    const auto date = QDate::fromString(QString::fromLatin1(Common::g_build_date).left(10),
+                                       Qt::ISODate);
+    whats_new_dialog = new WhatsNewDialog(build, date, LICHII_USE_PENDING_RELEASE_NOTES, this);
+    whats_new_dialog->setAttribute(Qt::WA_DeleteOnClose);
+    ConfigurationShared::FitToScreen(whats_new_dialog, QSize(600, 740));
+    whats_new_dialog->show();
+
+    if (build && build != UISettings::values.last_seen_release.GetValue()) {
+        config->SaveLastSeenRelease(build);
     }
 }
 
@@ -5348,21 +5397,41 @@ void MainWindow::OnGameListPrepareShaderWarm(u64 program_id, const std::string& 
     shader_warm_dialog->Start();
 }
 
-/// With precache_shaders on: a title precached before is precached again only when the driver or
-/// its precache file changed (the renderer checks). For one never precached, Ask asks whether to
-/// precache before the game starts. A title whose precache file is missing or stale (another cache
-/// version, an older builder) gets one built from its game files first. A stopped or failed build
+/// Precompile All Shaders: turning it on records the request, sets the game's precache to Always
+/// and builds the precache file now; the compiling itself runs on the loading screen of the next
+/// start. Turning it off keeps the files and the game's precache setting.
+void MainWindow::OnGameListPrecompileShaders(u64 program_id, const std::string& game_path,
+                                             bool on) {
+    if (!SetShaderWarmRequested(program_id, on)) {
+        QMessageBox::warning(this, tr("Precompile All Shaders"),
+                             tr("The setting could not be saved in the shader folder."));
+        return;
+    }
+    LOG_INFO(Frontend, "Precompile all shaders for {:016x}: {}", program_id, on ? "on" : "off");
+    if (on) {
+        Config::SaveGameValue(fmt::format("{:016X}", program_id), Settings::values.precache_shaders,
+                              std::to_string(static_cast<u32>(Settings::PrecacheShaders::Always)));
+        OnGameListPrepareShaderWarm(program_id, game_path);
+    }
+}
+
+/// With precache_shaders on, or Precompile All Shaders for the game: a title precached before is
+/// precached again only when the driver or its precache file changed (the renderer checks). For
+/// one never precached, Ask asks whether to precache before the game starts. A title whose
+/// precache file is missing or stale (another cache version, an older builder) gets one built
+/// from its game files first. A stopped or failed build
 /// starts the game with the file it had, or without precaching when there is none.
 void MainWindow::PrepareShaderPrecache(u64 title_id, const std::filesystem::path& game_path) {
     namespace ShaderWarm = VideoCommon::ShaderWarm;
     ShaderWarm::RequestWarmBeforeStart(false);
     const auto mode = Settings::values.precache_shaders.GetValue();
+    const auto warm_file = ShaderWarm::ComputeWarmPath(title_id);
+    const bool requested = title_id != 0 && ShaderWarm::WarmRequested(warm_file);
     // The precache runs where the disk shader cache loads.
-    if (title_id == 0 || mode == Settings::PrecacheShaders::Off ||
+    if (title_id == 0 || (mode == Settings::PrecacheShaders::Off && !requested) ||
         !Settings::values.use_disk_shader_cache.GetValue()) {
         return;
     }
-    const auto warm_file = ShaderWarm::ComputeWarmPath(title_id);
     const auto stale = ShaderWarm::WarmFilesStale(warm_file);
     const bool pending = ShaderWarm::WarmPending(title_id);
     if (!pending && !stale) {
@@ -5370,7 +5439,7 @@ void MainWindow::PrepareShaderPrecache(u64 title_id, const std::filesystem::path
         ShaderWarm::RequestWarmBeforeStart(true);
         return;
     }
-    if (pending && mode == Settings::PrecacheShaders::Ask) {
+    if (pending && mode == Settings::PrecacheShaders::Ask && !requested) {
         QMessageBox box(QMessageBox::Question, tr("Precache Shaders"),
                         tr("The shaders of this game are not precached yet. Precache them now?\n\n"
                            "The game starts when they are done. The first time, the game files "
@@ -6245,12 +6314,12 @@ void MainWindow::UpdateFrameGenButton() {
 
     const Settings::FrameGenType selected_type = Settings::values.frame_gen_type.GetValue();
     // Once a game runs, NVIDIA DLSS Frame Generation that isn't this session's generator gives
-    // way to FSR3.
+    // way to Lichii Optical Flow.
     const bool dlssg_fallback = selected_type == Settings::FrameGenType::NvidiaDlssG &&
                                 emulation_running &&
                                 frame_gen_state == VideoCore::FrameGenState::Running;
     const Settings::FrameGenType shown_type =
-        dlssg_fallback ? Settings::FrameGenType::Fsr3 : selected_type;
+        dlssg_fallback ? Settings::FrameGenType::OpticalFlow : selected_type;
     const QString& type_text =
         ConfigurationShared::frame_gen_type_texts_map.find(shown_type)->second;
     const QString type = shown_type == Settings::FrameGenType::NvidiaDlssG
@@ -6287,7 +6356,7 @@ void MainWindow::UpdateFrameGenButton() {
         break;
     case VideoCore::FrameGenState::UnsupportedGpu:
         unavailable = tr("This GPU lacks Vulkan features LSFG needs (Vulkan memory model and null "
-                         "descriptors). The Optical Flow type may still work.");
+                         "descriptors). Lichii Optical Flow Frame Generation may still work.");
         break;
     case VideoCore::FrameGenState::UnsupportedSurface:
         unavailable = tr("This GPU can't write to the window's swapchain format from a shader, so "
@@ -6311,7 +6380,7 @@ void MainWindow::UpdateFrameGenButton() {
 
     const QString fallback =
         dlssg_fallback ? tr(" NVIDIA DLSS Frame Generation can't run for this game or setup, so "
-                            "FSR3 runs instead; the log says why.")
+                            "Lichii Optical Flow Frame Generation runs instead; the log says why.")
                        : QString();
     if (frame_gen_generating) {
         frame_gen_status_button->setText(mode);

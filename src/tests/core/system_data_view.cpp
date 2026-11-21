@@ -173,9 +173,9 @@ public:
         return VectorVfsFile::Read(out, short_read && size != 0 ? size - 1 : size, offset);
     }
 
-    std::size_t Write(const u8* data, std::size_t size, std::size_t offset) override {
+    std::size_t Write(const u8* buffer, std::size_t size, std::size_t offset) override {
         ++writes;
-        return VectorVfsFile::Write(data, size, offset);
+        return VectorVfsFile::Write(buffer, size, offset);
     }
 
     bool Resize(std::size_t size) override {

@@ -1096,7 +1096,8 @@ VmaPool Device::GetSeparatePool(SeparatePool kind, u32 memory_type) const {
         const VmaPoolCreateInfo ci{
             .memoryTypeIndex = memory_type,
             .flags = 0,
-            .blockSize = SeparatePoolBlockSize,
+            .blockSize = kind == SeparatePool::DeviceBuffers ? device_buffer_pool_block_size
+                                                             : SeparatePoolBlockSize,
             .minBlockCount = 0,
             .maxBlockCount = 0,
             .priority = 0.f,
@@ -2546,6 +2547,17 @@ void Device::CollectPhysicalMemoryInfo() {
         device_access_memory += heap_size;
     }
     main_heap_size = limit(mem_properties.memoryHeaps[main_heap].size);
+    if ((mem_properties.memoryHeaps[main_heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0) {
+        const u64 main_heap_budget = limit(budget.heapBudget[main_heap]);
+        device_buffer_pool_block_size = SelectDeviceBufferPoolBlockSize(
+            properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU,
+            main_heap_size, main_heap_budget);
+        if (device_buffer_pool_block_size != SeparatePoolBlockSize) {
+            LOG_INFO(Render_Vulkan, "Device buffer pool: {} MiB blocks (heap {} MiB, budget {} MiB)",
+                     device_buffer_pool_block_size >> 20, main_heap_size >> 20,
+                     main_heap_budget >> 20);
+        }
+    }
     if (is_integrated) {
         const s64 available_memory = static_cast<s64>(device_access_memory - device_initial_usage);
         const u64 memory_size = Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive ? 6_GiB : 4_GiB;

@@ -55,6 +55,7 @@ public:
                                 TitleType title_type = TitleType::Application) const;
     VirtualFile GetNCAFile(u64 title_id, ContentRecordType type,
                            TitleType title_type = TitleType::Application) const;
+    VirtualFile GetPackedUpdateFile(u64 program_id) const;
     VirtualFile GetNCAFileById(const std::array<u8, 16>& id) const;
 
     std::vector<VirtualFile> GetFiles() const override;

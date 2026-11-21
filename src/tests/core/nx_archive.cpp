@@ -318,6 +318,27 @@ TEST_CASE("NX: an extracted add-on is listed as add-on content after Load", "[co
     CHECK(ReadText(romfs->GetFile("dlc.bin")) == "dlc");
 }
 
+TEST_CASE("NX: a native base loads in a System nobody gave a content provider", "[core][nx]") {
+    // System::GetContentProvider dereferenced a null provider until a frontend called
+    // SetContentProvider, and AppLoader_NX keeps it for a native base's NSP loader. A System
+    // starts with an empty one now.
+    ScopedSystemTestContext environment;
+    Core::System system;
+    CHECK_FALSE(system.GetContentProvider().HasEntry(ApplicationId,
+                                                     FileSys::ContentRecordType::Program));
+    FileSys::ManualContentProvider provider;
+    system.RegisterContentProvider(FileSys::ContentProviderUnionSlot::FrontendManual, &provider);
+    Loader::AppLoader_NX loader{system, OpenFixture("native_external_base.nx")};
+    u64 program_id{};
+    REQUIRE(loader.ReadProgramId(program_id) == Loader::ResultStatus::Success);
+    CHECK(program_id == ApplicationId);
+    loader.RegisterContent(provider);
+    CHECK(system.GetContentProviderUnion().HasEntry(ApplicationId,
+                                                    FileSys::ContentRecordType::Program));
+    FileSys::VirtualFile romfs;
+    CHECK(loader.ReadRomFS(romfs) == Loader::ResultStatus::Success);
+}
+
 TEST_CASE("NX: a native base supports external updates and version disabling",
           "[core][nx][external]") {
     for (const auto archive : {"native_external_base.nx", "native_embedded_update.nx"}) {

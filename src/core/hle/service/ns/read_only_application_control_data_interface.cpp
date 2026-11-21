@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <bit>
 #include <vector>
 #include <optional>
 #include <string>
@@ -188,6 +189,11 @@ Result IReadOnlyApplicationControlDataInterface::GetApplicationControlData(
 
 Result IReadOnlyApplicationControlDataInterface::GetApplicationDesiredLanguage(
     Out<ApplicationLanguage> out_desired_language, u32 supported_languages) {
+    return ResolveApplicationDesiredLanguage(out_desired_language, supported_languages, false);
+}
+
+Result ResolveApplicationDesiredLanguage(Out<ApplicationLanguage> out_desired_language,
+                                         u32 supported_languages, bool allow_unlisted_language) {
     LOG_INFO(Service_NS, "called with supported_languages={:08X}", supported_languages);
 
     // Get language code from settings
@@ -213,6 +219,14 @@ Result IReadOnlyApplicationControlDataInterface::GetApplicationDesiredLanguage(
             *out_desired_language = lang;
             R_SUCCEED();
         }
+    }
+
+    if (allow_unlisted_language) {
+        const auto first_supported = std::countr_zero(supported_languages);
+        *out_desired_language = first_supported < static_cast<int>(ApplicationLanguage::Count)
+                                    ? static_cast<ApplicationLanguage>(first_supported)
+                                    : priority_list->front();
+        R_SUCCEED();
     }
 
     LOG_ERROR(Service_NS, "Could not find a valid language! supported_languages={:08X}",

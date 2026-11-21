@@ -297,19 +297,15 @@ QList<QStandardItem*> MakeGameListEntry(const std::string& path, const std::stri
             return FormatPatchNameVersions(patch, loader, loader.IsRomFSUpdatable());
         });
 
-    FileSys::NACP nacp{};
+    std::string version;
     // An NX tree snapshot, like a NUP, is already the updated game: no patch manager update.
     if ((file_type == Loader::FileType::NUP ||
          (file_type == Loader::FileType::NX && !loader.IsRomFSUpdatable())) &&
-        loader.ReadControlData(nacp) == Loader::ResultStatus::Success) {
-        const std::string version_string = nacp.GetVersionString();
-        if (!version_string.empty()) {
-            if (!patch_versions.isEmpty()) {
-                patch_versions += QLatin1Char('\n');
-            }
-            patch_versions += QStringLiteral("Update (%1)").arg(
-                QString::fromStdString(version_string));
+        loader.ReadDisplayVersion(version) == Loader::ResultStatus::Success && !version.empty()) {
+        if (!patch_versions.isEmpty()) {
+            patch_versions += QLatin1Char('\n');
         }
+        patch_versions += QStringLiteral("Update (%1)").arg(QString::fromStdString(version));
     }
 
     u64 play_time = play_time_manager.GetPlayTime(program_id);

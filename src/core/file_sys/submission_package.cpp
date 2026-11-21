@@ -17,6 +17,7 @@
 #include "core/file_sys/nca_metadata.h"
 #include "core/file_sys/partition_filesystem.h"
 #include "core/file_sys/program_metadata.h"
+#include "core/file_sys/registered_cache.h"
 #include "core/file_sys/submission_package.h"
 #include "core/loader/loader.h"
 
@@ -209,6 +210,14 @@ VirtualFile NSP::GetNCAFile(u64 title_id, ContentRecordType type, TitleType titl
     if (nca != nullptr)
         return nca->GetBaseFile();
     return nullptr;
+}
+
+VirtualFile NSP::GetPackedUpdateFile(u64 program_id) const {
+    const auto update_id = GetUpdateTitleID(program_id);
+    if (auto update = GetNCAFile(update_id, ContentRecordType::Program, TitleType::Update)) {
+        return update;
+    }
+    return GetNCAFile(update_id, ContentRecordType::Program, TitleType::Application);
 }
 
 std::vector<VirtualFile> NSP::GetFiles() const {
