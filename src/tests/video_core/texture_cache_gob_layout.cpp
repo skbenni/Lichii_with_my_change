@@ -5,6 +5,7 @@
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 #include <catch2/catch_test_macros.hpp>
 
@@ -130,6 +131,10 @@ VideoCommon::ImageInfo MakeInfo() {
 namespace VideoCommon {
 
 struct TextureCacheTestAccess {
+    template <class C, class F>
+    static void ForEachSparseSegment(C& cache, ImageBase& image, F&& func) {
+        cache.ForEachSparseSegment(image, std::forward<F>(func));
+    }
     template <class C>
     static ImageId Insert(C& cache, const ImageInfo& info, GPUVAddr gpu_addr, DAddr cpu_addr) {
         const auto id = cache.slot_images.insert(cache.runtime, info, gpu_addr, cpu_addr);
@@ -215,6 +220,30 @@ struct Fixture {
 };
 
 } // namespace
+
+TEST_CASE("Sparse texture iteration skips segments that cannot be translated",
+          "[video_core][texture_cache][sparse_segments]") {
+    Fixture f;
+    constexpr GPUVAddr gpu_addr = 0x200000;
+    constexpr size_t page_size = 0x1000;
+    constexpr DAddr invalid_addr = DAddr{1} << Tegra::MaxwellDeviceMemoryManager::AS_BITS;
+    constexpr DAddr valid_addr = 0x20000;
+    f.memory->Map(gpu_addr, invalid_addr, page_size, Tegra::PTEKind::PITCH, false);
+    f.memory->Map(gpu_addr + page_size, valid_addr, page_size, Tegra::PTEKind::PITCH, false);
+
+    VideoCommon::ImageBase image{MakeInfo(), gpu_addr, valid_addr};
+    REQUIRE(f.memory->GetSubmappedRange(gpu_addr, image.guest_size_bytes).size() == 2);
+    REQUIRE_FALSE(f.memory->GpuToCpuAddress(gpu_addr));
+
+    size_t visited{};
+    Access::ForEachSparseSegment(*f.cache, image, [&](GPUVAddr address, DAddr device, size_t size) {
+        ++visited;
+        CHECK(address == gpu_addr + page_size);
+        CHECK(device == valid_addr);
+        CHECK(size == page_size);
+    });
+    CHECK(visited == 1);
+}
 
 TEST_CASE("FindImage keeps GOB and native tiling images apart at one address",
           "[video_core][texture_cache][gob_layout]") {

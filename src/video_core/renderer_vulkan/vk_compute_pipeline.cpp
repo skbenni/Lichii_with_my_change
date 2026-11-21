@@ -765,7 +765,8 @@ ComputePipeline::ConfigureResult ComputePipeline::Configure(
     // Log compute pipeline binding
     if (GPU::Logging::IsActive() &&
         Settings::values.gpu_log_vulkan_calls.GetValue()) {
-        GPU::Logging::GPULogger::GetInstance().LogPipelineBind(true, "compute pipeline");
+        GPU::Logging::GPULogger::GetInstance().LogPipelineBind(
+            true, fmt::format("shader={:016x}", shader_hash));
     }
 
     const DescriptorUpdateEntry* const descriptor_data{guest_descriptor_queue.UpdateData()};

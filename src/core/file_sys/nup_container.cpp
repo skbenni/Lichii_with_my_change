@@ -947,7 +947,9 @@ std::optional<NupContainer::ProgramSelection> NupContainer::SelectProgram() {
                     (base_id >> 56) == 0x01 && base_id == GetBaseTitleID(base_id) &&
                     (executable_id >> 56) == 0x04 &&
                     GetSwitch1ApplicationID(executable_id) == base_id + 1;
-                if (executable_id != base_id && !matching_edition) {
+                // A base packed without an ExeFS or NPDM has title ID 0 and claims no program.
+                const bool base_claims_no_program = !base_exefs && base_id == 0;
+                if (!base_claims_no_program && executable_id != base_id && !matching_edition) {
                     return std::nullopt;
                 }
                 program_id = executable_id;

@@ -1809,6 +1809,52 @@ TEST_CASE("NUP boot and platform probe use the same program's ExeFS", "[nup][boo
     }
 }
 
+TEST_CASE("A native update boots over a base packed without an executable", "[nup][boot-inputs]") {
+    TempDir t;
+    const auto root = t.path / "Game";
+    fs::create_directories(root / "base/exefs");
+    Put(root / "base/romfs/base.bin", "base");
+    std::string main(0x100, '\0');
+    main.replace(0, 4, "NSO0");
+    main[0x40] = 'U';
+    Put(root / "updates/131073/exefs/main", main);
+    Put(root / "updates/131073/exefs/main.npdm", BootNpdm(TitleId, true));
+    Put(root / "updates/131073/romfs/update.bin", "update");
+    const auto archive = t.path / "Game.nup";
+    REQUIRE(FileSys::Nup::PackDump(root, archive) == FileSys::Nup::PackResult::Success);
+
+    FileSys::RealVfsFilesystem vfs;
+    const auto file = vfs.OpenFile(archive.string(), FileSys::OpenMode::Read);
+    NupContainer nup{file};
+    REQUIRE(nup.GetStatus() == Loader::ResultStatus::Success);
+    REQUIRE(nup.FindBasePackage() == std::size_t{0});
+    REQUIRE(nup.GetExeFSDir(0) == nullptr);
+    REQUIRE(nup.GetPackages()[0].title_id == 0);
+
+    CHECK(Core::FindSwitch2Program(file, 0, 0) == TitleId);
+    Loader::AppLoader_NUP loader{file};
+    u64 program_id{};
+    REQUIRE(loader.ReadProgramId(program_id) == Loader::ResultStatus::Success);
+    CHECK(program_id == TitleId);
+    CHECK(loader.ReadContainerUpdateVersion() == "2.0.1");
+
+    Core::System system{Service::Account::ProfileStorage::Scratch};
+    system.SetFilesystem(std::make_shared<FileSys::RealVfsFilesystem>());
+    system.SetContentProvider(std::make_unique<FileSys::ContentProviderUnion>());
+    std::array<u8, 0x20> build_id{};
+    REQUIRE(loader.ReadMainBuildId(system, build_id) == Loader::ResultStatus::Success);
+    CHECK(build_id.front() == 'U');
+
+    FileSys::VirtualFile romfs;
+    REQUIRE(loader.ReadRomFS(romfs) == Loader::ResultStatus::Success);
+    const auto tree = FileSys::ExtractRomFS(romfs);
+    REQUIRE(tree != nullptr);
+    REQUIRE(tree->GetFile("base.bin") != nullptr);
+    CHECK(Read(tree->GetFile("base.bin")) == "base");
+    REQUIRE(tree->GetFile("update.bin") != nullptr);
+    CHECK(Read(tree->GetFile("update.bin")) == "update");
+}
+
 TEST_CASE("The own-index fallback does not mount mods without a RomFS", "[boot-inputs]") {
     TempDir t;
     constexpr u64 program_id = TitleId + 1;

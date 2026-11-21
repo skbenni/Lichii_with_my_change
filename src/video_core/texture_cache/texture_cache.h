@@ -1516,7 +1516,7 @@ void TextureCache<P>::TickFrame() {
                     critical_memory = budget - (std::min)(reserved, budget / 2);
                     // The device's budget is not all the room there is: see HostCriticalMemory.
                     // The usage is the driver's, which still counts images waiting to be freed.
-                    const std::optional<u64> commit_room = Common::GetSystemCommitRoom();
+                    const std::optional<u64> commit_room = Common::GetProcessCommitRoom();
                     const u64 host_critical =
                         commit_room
                             ? HostCriticalMemory(runtime.GetDeviceMemoryUsage(), *commit_room)
@@ -1595,7 +1595,8 @@ void TextureCache<P>::TickFrame() {
                                  slack_margin >> 20, other_memory >> 20, budget >> 20,
                                  retention_limit >> 20, retention_budget >> 20);
                         if (commit_room) {
-                            LOG_INFO(HW_GPU, "Host memory: {} MiB of commit left, {}",
+                            LOG_INFO(HW_GPU,
+                                     "Host memory: {} MiB of commit left for this process, {}",
                                      *commit_room >> 20,
                                      critical_memory == host_critical
                                          ? "which bounds the thresholds"
@@ -5333,8 +5334,16 @@ void TextureCache<P>::ForEachSparseSegment(ImageBase& image, Func&& func) {
     constexpr bool RETURNS_BOOL = std::is_same_v<FuncReturn, bool>;
     const auto segments = gpu_memory->GetSubmappedRange(image.gpu_addr, image.guest_size_bytes);
     for (const auto& [gpu_addr, size] : segments) {
-        std::optional<DAddr> cpu_addr = gpu_memory->GpuToCpuAddress(gpu_addr);
-        ASSERT(cpu_addr);
+        const std::optional<DAddr> cpu_addr = gpu_memory->GpuToCpuAddress(gpu_addr);
+        if (!cpu_addr) {
+            static std::atomic<u32> logged{};
+            if (logged.fetch_add(1, std::memory_order_relaxed) < 8) {
+                LOG_WARNING(HW_GPU,
+                            "Skipping sparse texture segment {:#x}+{:#x}: no device address",
+                            gpu_addr, size);
+            }
+            continue;
+        }
         if constexpr (RETURNS_BOOL) {
             if (func(gpu_addr, *cpu_addr, size)) {
                 break;
