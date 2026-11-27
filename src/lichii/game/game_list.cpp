@@ -140,7 +140,7 @@ GameList::GameList(FileSys::VirtualFilesystem vfs_, FileSys::ManualContentProvid
     connect(item_model, &GameListModel::SaveConfig, this, &GameList::SaveConfig);
     connect(item_model, &GameListModel::PopulatingStarted, this, &GameList::OnPopulate);
 
-    // TODO: impl on grid/carousel
+    // The grid and the carousel report theirs from OnTextChanged.
     connect(tree_view, &GameTree::FilterResultReady, search_field,
             [this](int visible, int total) { search_field->setFilterResult(visible, total); });
 
@@ -192,8 +192,47 @@ void GameList::SetupViews() {
     carousel_view->SetModel(item_model);
 }
 
-QString GameList::GetLastFilterResultItem() const {
-    return tree_view->GetLastFilterResultItem();
+QModelIndex GameList::GetFilterResult() const {
+    if (m_isTreeMode) {
+        return tree_view->GetFilterResult();
+    }
+    // Folder cards are visible in the grid root, but only games count as search results.
+    QModelIndex result;
+    for (int row = 0; row < item_model->rowCount(); ++row) {
+        if (m_currentView->isRowHidden(row)) {
+            continue;
+        }
+        const QModelIndex index = item_model->index(row, 0);
+        if (index.data(GameListItem::TypeRole).value<GameListItemType>() !=
+            GameListItemType::Game) {
+            continue;
+        }
+        if (result.isValid()) {
+            return {};
+        }
+        result = index;
+    }
+    return result;
+}
+
+int GameList::GameCount() const {
+    if (!m_isTreeMode) {
+        int games = 0;
+        for (int row = 0; row < item_model->rowCount(); ++row) {
+            const QStandardItem* item = item_model->item(row, 0);
+            if (item && item->data(GameListItem::TypeRole).value<GameListItemType>() ==
+                            GameListItemType::Game) {
+                ++games;
+            }
+        }
+        return games;
+    }
+    int games = 0;
+    // The first row is Favorites and the last adds a directory; the rest are folders.
+    for (int i = 1; i < item_model->rowCount() - 1; ++i) {
+        games += item_model->item(i, 0)->rowCount();
+    }
+    return games;
 }
 
 void GameList::ClearFilter() {
@@ -261,6 +300,7 @@ void GameList::UnloadController() {
 
 void GameList::ResetViewMode() {
     const auto mode = UISettings::values.game_list_mode.GetValue();
+    const bool wasTreeMode = m_isTreeMode;
     game_list_mode = mode;
     grid_view->SetBrowsedDirectory(-1);
 
@@ -278,10 +318,6 @@ void GameList::ResetViewMode() {
     case Settings::GameListMode::GridView:
         m_currentView = grid_view;
         newTreeMode = false;
-        if (search_field) {
-            grid_view->ApplyFilter(search_field->filterText().toLower(), item_model);
-        }
-
         break;
     case Settings::GameListMode::CarouselView:
         m_currentView = carousel_view;
@@ -329,6 +365,10 @@ void GameList::ResetViewMode() {
             item_model->PopulateAsync(UISettings::values.game_dirs);
         }
     }
+
+    if (!m_isTreeMode && !wasTreeMode) {
+        OnTextChanged(search_field->filterText());
+    }
 }
 
 void GameList::OnTextChanged(const QString& new_text) {
@@ -337,8 +377,10 @@ void GameList::OnTextChanged(const QString& new_text) {
     if (m_isTreeMode) {
         tree_view->ApplyFilter(edit_filter_text, item_model);
     } else {
-        grid_view->ApplyFilter(edit_filter_text, item_model);
-        carousel_view->ApplyFilter(edit_filter_text, item_model);
+        const int grid_shown = grid_view->ApplyFilter(edit_filter_text, item_model);
+        const int carousel_shown = carousel_view->ApplyFilter(edit_filter_text, item_model);
+        const int shown = m_currentView == carousel_view ? carousel_shown : grid_shown;
+        search_field->setFilterResult(shown, GameCount());
     }
 }
 
@@ -422,10 +464,7 @@ void GameList::OnPopulatingCompleted(const QStringList& watch_list) {
     m_populating = false;
     m_currentView->setEnabled(true);
 
-    int children_total = 0;
-    for (int i = 1; i < item_model->rowCount() - 1; ++i) {
-        children_total += item_model->item(i, 0)->rowCount();
-    }
+    const int children_total = GameCount();
 
     search_field->setFilterResult(children_total, children_total);
     if (children_total > 0) {
@@ -438,8 +477,7 @@ void GameList::OnPopulatingCompleted(const QStringList& watch_list) {
 
     // A repopulate (a directory removed, deep scan toggled) replaces the rows: apply the search
     // text the user still has typed to them, and restore the folder card the grid is browsing.
-    if (!search_field->filterText().isEmpty() ||
-        (!m_isTreeMode && game_list_mode == Settings::GameListMode::GridView)) {
+    if (!m_isTreeMode || !search_field->filterText().isEmpty()) {
         OnTextChanged(search_field->filterText());
     }
 
@@ -724,6 +762,12 @@ void GameList::UpdateIconSizes() {
 }
 
 void GameList::ValidateEntry(const QModelIndex& item) {
+    // Qt can activate a current row the search has hidden.
+    const bool hidden = m_isTreeMode ? tree_view->isRowHidden(item.row(), item.parent())
+                                     : grid_view->isRowHidden(item.row());
+    if (hidden) {
+        return;
+    }
     const auto selected = item.sibling(item.row(), 0);
 
     switch (selected.data(GameListItem::TypeRole).value<GameListItemType>()) {

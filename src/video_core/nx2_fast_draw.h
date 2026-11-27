@@ -151,8 +151,16 @@ inline void BeginMemoryChange() {
 
 /// Once the change landed. `changed` false ends a BeginMemoryChange that changed nothing.
 inline void EndMemoryChange(bool changed = true) {
-    if (changed && !g_memory_changed.load(std::memory_order_relaxed)) {
-        g_memory_changed.store(true, std::memory_order_relaxed);
+    if (changed) {
+        // Between the bytes and the flag's load, as NoteHandlesRead fences between its clear and
+        // the resolve's reads: either this load sees the clear, and the flag is set again, or the
+        // resolve's reads see the bytes. Without it a load could read the flag still set from
+        // before a clear while the bytes were not yet visible to the resolve, and the clear then
+        // hid the write.
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        if (!g_memory_changed.load(std::memory_order_relaxed)) {
+            g_memory_changed.store(true, std::memory_order_relaxed);
+        }
     }
     g_changes_landing.fetch_sub(1, std::memory_order_release);
 }

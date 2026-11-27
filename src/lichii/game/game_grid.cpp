@@ -70,7 +70,7 @@ void GameGrid::SetModel(GameListModel* model) {
     UpdateIconSize();
 }
 
-void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model) {
+int GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model) {
     last_filter_text = edit_filter_text;
     int row_count = model->rowCount();
     bool has_games = false;
@@ -154,6 +154,17 @@ void GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model
             clearSelection();
         }
     }
+
+    int shown = 0;
+    for (int i = 0; i < row_count; ++i) {
+        const QStandardItem* item = model->item(i, 0);
+        if (item && !isRowHidden(i) &&
+            item->data(GameListItem::TypeRole).value<GameListItemType>() ==
+                GameListItemType::Game) {
+            ++shown;
+        }
+    }
+    return shown;
 }
 
 void GameGrid::SetBrowsedDirectory(int dir_index) {

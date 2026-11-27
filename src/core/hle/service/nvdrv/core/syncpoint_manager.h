@@ -91,6 +91,24 @@ public:
     u32 UpdateMin(u32 id);
 
     /**
+     * @brief Brings host1x's guest and host values of the syncpoint up to its maximum, as if
+     * every increment submitted to it had run, running the actions those increments meet; then
+     * synchronises its minimum. For a channel closed while work submitted to it was dropped, so
+     * that the fences of those increments are signalled and the syncpoint is reused without a
+     * deficit. Nothing else may increment it meanwhile.
+     *
+     * Each bank (guest, host) is completed only when it is at most 1 << 16 increments short of
+     * the maximum. A bank further behind is taken as values that are not this channel's
+     * increments: it is logged as a warning ("... short of its max ...: left") and left as it
+     * is. Its fences are then not signalled by the close. Event waits on them stay pending until
+     * something else reaches their value or the guest gives up on them. A wait that nvhost_ctrl
+     * escalates after repeated failures (WaitHost with the application stalled) blocks until
+     * then, as it would have before completion existed.
+     * @return The new minimum value of the syncpoint
+     */
+    u32 CompleteSyncpoint(u32 id);
+
+    /**
      * @brief Frees the usage of a syncpoint.
      */
     void FreeSyncpoint(u32 id);

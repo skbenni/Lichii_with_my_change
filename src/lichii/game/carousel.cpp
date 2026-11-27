@@ -44,8 +44,9 @@ void GameCarousel::SetModel(GameListModel* model) {
     UpdateIconSize();
 }
 
-void GameCarousel::ApplyFilter(const QString& edit_filter_text, GameListModel* model) {
+int GameCarousel::ApplyFilter(const QString& edit_filter_text, GameListModel* model) {
     int row_count = model->rowCount();
+    int shown = 0;
 
     for (int i = 0; i < row_count; ++i) {
         QStandardItem* item = model->item(i, 0);
@@ -54,26 +55,26 @@ void GameCarousel::ApplyFilter(const QString& edit_filter_text, GameListModel* m
 
         const auto type = item->data(GameListItem::TypeRole).value<GameListItemType>();
         const bool show_item = type == GameListItemType::Game || type == GameListItemType::AddDir;
-        setRowHidden(i, !show_item || !Lichii::FilterMatches(edit_filter_text, item));
+        const bool matches = show_item && Lichii::FilterMatches(edit_filter_text, item);
+        setRowHidden(i, !matches);
+        shown += matches && type == GameListItemType::Game ? 1 : 0;
     }
 
-
-    const QModelIndex current = currentIndex();
-    if (current.isValid() && isRowHidden(current.row())) {
-        QModelIndex first_visible;
-        for (int i = 0; i < row_count; ++i) {
+    if (currentIndex().isValid() && isRowHidden(currentIndex().row())) {
+        QModelIndex first_shown;
+        for (int i = 0; i < row_count && !first_shown.isValid(); ++i) {
             if (!isRowHidden(i)) {
-                first_visible = model->index(i, 0);
-                break;
+                first_shown = model->index(i, 0);
             }
         }
-        if (first_visible.isValid()) {
-            setCurrentIndex(first_visible);
+        if (first_shown.isValid()) {
+            setCurrentIndex(first_shown);
         } else {
             setCurrentIndex(QModelIndex());
             clearSelection();
         }
     }
+    return shown;
 }
 
 void GameCarousel::UpdateIconSize() {
